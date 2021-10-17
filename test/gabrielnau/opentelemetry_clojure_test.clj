@@ -1,6 +1,6 @@
 (ns gabrielnau.opentelemetry-clojure-test
   (:require [clojure.test :refer :all]
-            [gabrielnau.opentelemetry-clojure :refer :all]))
+            [gabrielnau.examples :refer :all]))
 
 (deftest a-test
   (testing "FIXME, I fail."

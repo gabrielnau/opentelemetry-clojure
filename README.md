@@ -13,6 +13,7 @@ Non-goals:
 ## TODO:
 
 - Tracing:
+  - smell : closing a scope before storing Context/current on the Var 
   - implement Tracer interface
     - About don't run twice instanciation: https://github.com/open-telemetry/opentelemetry-java/issues/3717 >> GlobalOpenTelemetry vs javaagent ? 
   - implement all SpanBuilder interface:
@@ -50,6 +51,7 @@ Non-goals:
     very strict requirements on context being propagated correctly (i.e., because you use context in
     a multi-tenant system).
   - Performance:
+    - why `Context.wrap` doesn't close the `Scope` ? 
     - get a Yourkit licence for open source project ?
     - warn on reflection
     - for some functions, if I provide an easy-to-use but with reflection, then I must also provide a more Java-ish version but without reflection (when perf is required) -> Span attributes
