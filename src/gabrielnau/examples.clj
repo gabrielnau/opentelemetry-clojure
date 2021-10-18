@@ -1,9 +1,8 @@
 (ns gabrielnau.examples
   (:require
-    [gabrielnau.test-utils :as test-utils]
     [gabrielnau.context-propagation :as context-propagation]
-    [clojure.core.async :as a :refer [>! <! >!! <!! go chan buffer close! thread
-                                      alts! alts!! timeout]])
+    [clojure.core.async :as async :refer [>! <! >!! <!! go chan buffer close! thread
+                                          alts! alts!! timeout]])
   (:import (io.opentelemetry.exporter.logging LoggingSpanExporter)
            (io.opentelemetry.sdk.trace SdkTracerProvider)
            (io.opentelemetry.sdk.trace.export SimpleSpanProcessor)
@@ -16,8 +15,7 @@
             (doto (OpenTelemetrySdk/builder)
               (.setTracerProvider (.build
                                     (doto (SdkTracerProvider/builder)
-                                      (.addSpanProcessor (SimpleSpanProcessor/create (LoggingSpanExporter.))) ;; we can visually check parent / child proper nesting given ids in logs
-                                      (.addSpanProcessor (SimpleSpanProcessor/create test-utils/memory-exporter)))))) ;; wip to see how we can properly test it
+                                      (.addSpanProcessor (SimpleSpanProcessor/create (LoggingSpanExporter.))))))) ;; we can visually check parent / child proper nesting given ids in logs)))) ;; wip to see how we can properly test it
             .build))
 (def tracer (.getTracer otel "foo" "1.0.0"))
 
@@ -44,6 +42,14 @@
   ;Oct 18, 2021 12:10:23 AM io.opentelemetry.exporter.logging.LoggingSpanExporter export
   ;INFO: 'parent' : 328ba3ad90ca919608d26d153ec074a5 425fc3ec9bc489e0 INTERNAL [tracer: foo:1.0.0] {}
   ;; => same trace id 328ba3ad90ca919608d26d153ec074a5
+
+
+  (def ^:dynamic d)
+  (go
+    (binding [d :bound]
+      (println d (.getName (Thread/currentThread)))
+      (<! (async/timeout 10))
+      (println d (.getName (Thread/currentThread)))))
 
 
   ;; core/future example with agent executors wrapped
@@ -81,12 +87,15 @@
               (.end span-c))))
 
         ;; 2. validate core.async/go binding conveyance
-        (doseq [n (range 2)]
-          (go
-            (with-open [_ (.makeCurrent context-propagation/*current-context*)]
-              (let [span-c (new-span "child 2")]
-                (>! hi-chan (str "hi " n))
-                (.end span-c)))))
+        (go
+          (with-open [_ (.makeCurrent context-propagation/*current-context*)]
+            (let [span-c (new-span "child 2")
+                  context-1 (Context/current)]
+              (println "context hashCode before:" (.toString context-1) "on thread:" (.getName (Thread/currentThread)))
+              (<! (async/timeout 10))
+              (println "context hashCode after:" (.toString (Context/current)) "on thread:" (.getName (Thread/currentThread)))
+              (>! hi-chan (str "hi " 1))
+              (.end span-c))))
         (.end span)))))
   ;; LoggingSpanExporter logs:
   ;Oct 18, 2021 12:12:49 AM io.opentelemetry.exporter.logging.LoggingSpanExporter export

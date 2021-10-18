@@ -109,9 +109,32 @@ In clojure, that means to wrap in a `with-open` macro. The complete example is :
   (.end parent-span))
 ```
 
-The last detail to validate, is inside a go block, work on thread can park and then resume on another thread, which means our current context in thread locals would be not set. But we are guaranteed by Clojure implementation to always have `*context*` Var bound to the running thread, so it could mean to call `.makeCurrent` each time we build a span. TODO: write a spec to validate this (compare Context stored values).
+The last detail to validate, is inside a go block, work on thread can park and then resume on another thread, which means our current context in thread locals would be not set. But we are guaranteed by Clojure implementation to always have `*context*` Var bound to the running thread, so it could mean to call `.makeCurrent` each time we build a span.
+TODO: write a spec to validate this (compare Context stored values).
+UPDATE october 18: we indeed loose it, so it means we would have to ensure `.makeCurrent` is called with the bound clojure.lang.Var each time there is a core async function called that can park the state machine and resume it on another thread. This looks quite tedious.
+Example:
+```clojure
+(with-open [_ (.makeCurrent parent-span)]                      
+  (with-bindings {#'context-propagation/*current-context* (Context/current)}
+    (go
+      (with-open [_ (.makeCurrent context-propagation/*current-context*)]
+        (let [span-child (new-span "child 2")]
+          ;; will park and after resume on potentially another thread
+          (<! (async/timeout 10))
+          ;; at this point (Current/context) can be anything (null or the one from another code execution)
+          ;; we would need to call again:
+          ;; (with-open [_ (.makeCurrent context-propagation/*current-context*)]
+          ;; in order to restore the Context/current
+          (.end span-child)
+          )))))
+```
+Solutions to explore: 
+- macros to hide the boilerplate needed
+- don't try to have the correct `Context/current`, only use explicit context propagation by values inside a `go` block
+  - are they some other parts that rely implicitely on `Context/current`, like logging or metrics ? If so, that's not an option. 
 
-EDIT october 18:
+
+*UPDATE october 18:*
 
 - There is an obvious duality between thread local ContextStorage and Clojure dynamic var and with-bindings
     - both use "frames" to push / pop current Context in the scope of execution
