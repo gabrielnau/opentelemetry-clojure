@@ -109,8 +109,23 @@ In clojure, that means to wrap in a `with-open` macro. The complete example is :
   (.end parent-span))
 ```
 
-The last detail to validate, is inside a go block, work on thread can park and then resume on another thread, which means our current context in thread locals would be not set. But we are guaranteed by Clojure implementation to always have `*context*` Var bound to the running thread, so it could mean to call `.makeCurrent` each time we build a span. 
+The last detail to validate, is inside a go block, work on thread can park and then resume on another thread, which means our current context in thread locals would be not set. But we are guaranteed by Clojure implementation to always have `*context*` Var bound to the running thread, so it could mean to call `.makeCurrent` each time we build a span. TODO: write a spec to validate this (compare Context stored values).
 
+EDIT october 18:
+
+- There is an obvious duality between thread local ContextStorage and Clojure dynamic var and with-bindings
+    - both use "frames" to push / pop current Context in the scope of execution
+        - in opentelemetry-java, `ThreadLocalContextStorage` [implementation](https://github.com/open-telemetry/opentelemetry-java/blob/main/context/src/main/java/io/opentelemetry/context/ThreadLocalContextStorage.java#L20) does it and return an AutoCloseable `Scope`
+        - in Clojure, that's `with-binding` macro, which calls `clojure.lang.Var/pushThreadBindings` and `clojure.lang.Var/popThreadBindings` to restore previous frame
+- if we use a clojure dynamic Var as the context storage backend, we don't need to duplicate the code (`with-open`, `with-bindings`), simply calling opentelemetry API would set Clojure bindings that would then be conveyed accross thread boundaries.
+    - solution 1: custom `ContextStorage` implementation, that leverages a dynamic clojure.lang.Var as a storage (instead of direct calls to direct calls to ThreadLocal)
+    - solution 2: less "intrusive", simply add a wraper that hooks and call the clojure Var push and pop functions [example](https://github.com/open-telemetry/opentelemetry-java/blob/50408d499f85d5761d0a5ed9bf9d77d5ff01fff5/context/src/storageWrappersTest/java/io/opentelemetry/context/StorageWrappersTest.java#L22)
+
+  potential problems to explore:
+    - compatibility with opentelemetry javaagent auto instrumentation ?
+    - clojure.lang.Var might create more churn since it creates and store all stored "frames"
+
+    
 #### Solution 2: wrap ExecutorServices
 
 When we have access to the underlying `java.util.concurrent.Executor`, then we can simply use [Context/taskWrapping](https://github.com/open-telemetry/opentelemetry-java/blob/main/context/src/main/java/io/opentelemetry/context/Context.java#L114):
