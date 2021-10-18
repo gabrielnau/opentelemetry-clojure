@@ -1,4 +1,4 @@
-(ns opentelemetry-clj.tracing.span
+(ns opentelemetry-clj.trace.span
   (:import (io.opentelemetry.api.trace SpanBuilder SpanContext SpanKind)
            (io.opentelemetry.context Context)
            (io.opentelemetry.api.common Attributes)
