@@ -18,8 +18,11 @@ Non-goals:
     - About don't run twice instanciation: https://github.com/open-telemetry/opentelemetry-java/issues/3717 >> GlobalOpenTelemetry vs javaagent ? 
   - implement all SpanBuilder interface:
     - Events
-    - Attributes
     - Links https://javadoc.io/static/io.opentelemetry/opentelemetry-api/1.7.0/io/opentelemetry/api/trace/SpanBuilder.html
+    - Attributes
+      - see how to build a simple version that leverage reflection, and another additional version that is more performant and will create less churn, since it will be in the hot path 
+      - javadoc -> It is strongly recommended to use setAttribute(AttributeKey, Object), and pre-allocate your keys, if possible.
+    
   - Propagator W3C: async and sync Ring middleware implementation
     - check semantic conventions
       - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/semantic_conventions/http.md
@@ -52,7 +55,7 @@ Non-goals:
     a multi-tenant system).
   - Performance:
     - why `Context.wrap` doesn't close the `Scope` ? 
-    - get a Yourkit licence for open source project ?
+    - get a Yourkit licence for open source project: https://www.yourkit.com/java/profiler/purchase/#os_license
     - warn on reflection
     - for some functions, if I provide an easy-to-use but with reflection, then I must also provide a more Java-ish version but without reflection (when perf is required) -> Span attributes
     - with-bindings vs binding -> perf difference ? TODO: check with criterium
@@ -69,6 +72,7 @@ Non-goals:
       - https://ask.clojure.org/index.php/307/dynamic-binding-parking-removes-dynamic-bindings-outside
       - TODO test nested bindings inside a go block
       - https://clojure.atlassian.net/browse/ASYNC-94
+  - clj linter ?
   - deps:
     - remove sdk ? `Libraries that want to export telemetry data using OpenTelemetry MUST only depend on the opentelemetry-api package and should never configure or depend on the OpenTelemetry SDK. The SDK configuration must be provided by Applications which should also depend on the opentelemetry-sdk package, or any other implementation of the OpenTelemetry API. This way, libraries will obtain a real implementation only if the user application is configured for it. For more details, check out the Library Guidelines.`
     - should use the BOM but can't: https://clojure.atlassian.net/browse/TDEPS-202 ```clj -Stree '{:deps {io.opentelemetry/opentelemetry-bom {:mvn/version "1.7.0" :extension "pom"}}}'```
@@ -77,6 +81,7 @@ Non-goals:
     - https://docs.honeycomb.io/getting-data-in/java/opentelemetry-distro/#multi-span-attributes
     - BaggageSpanProcessor: ?
   - Documentation
+    - cljdoc https://github.com/cljdoc/cljdoc/blob/master/doc/userguide/for-library-authors.adoc
     - Docs: https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/docs
     - [Introduction to OpenTelemetry](https://www.youtube.com/watch?v=_OXYCzwFd1Y)
     - > Note that there is no need to "set" a tracer by name before getting it. The getTracer method always returns a handle to the same tracing client. The name you provide is to help identify which component generated which spans, and to potentially disable tracing for individual components.
@@ -86,6 +91,7 @@ Non-goals:
   - start to explore the Java doc, even if its still alpha
   - conventions: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/metrics/semantic_conventions/README.md
 - Release as a clojure lib:
+  - don't depend on latest clojure ? 
   - check for build, CI for open source
   - how to publish to clojars
   - see clojurians announcements and tracing channels to gather feedback

@@ -1,4 +1,4 @@
-(ns gabrielnau.test-utils
+(ns opentelemetry-clj.utils
   (:import (io.opentelemetry.sdk.testing.exporter InMemorySpanExporter)))
 
 (def memory-exporter (InMemorySpanExporter/create))
@@ -6,4 +6,5 @@
 ;; wip check in memory spans matches expectations
 (defn spans []
   (-> (.getFinishedSpanItems memory-exporter)))
+
 

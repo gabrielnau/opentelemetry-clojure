@@ -1,11 +1,13 @@
 {:paths ["src" "resources"]
  :deps {org.clojure/clojure {:mvn/version "1.10.3"}
-        org.clojure/core.async {:mvn/version "1.3.618"}
+
+        org.clojure/core.async {:mvn/version "1.3.618"} ;; remove or keep only in dev ?
+
         io.opentelemetry/opentelemetry-api {:mvn/version "1.7.0"}
+        ;; TODO: SDK only in dev
         io.opentelemetry/opentelemetry-exporter-logging {:mvn/version "1.7.0"}
         io.opentelemetry/opentelemetry-sdk {:mvn/version "1.7.0"}
-        io.opentelemetry/opentelemetry-sdk-testing {:mvn/version "1.7.0"}
-        aleph/aleph {:mvn/version "0.4.7-alpha7"}}
+        io.opentelemetry/opentelemetry-sdk-testing {:mvn/version "1.7.0"}}
 
 
 
