@@ -89,14 +89,14 @@
         ;; 2. validate core.async/go binding conveyance
         (go
           (with-open [_ (.makeCurrent context-propagation/*current-context*)]
-            (let [span-c (new-span "child 2")
+            (let [span-c    (new-span "child 2")
                   context-1 (Context/current)]
               (println "context hashCode before:" (.toString context-1) "on thread:" (.getName (Thread/currentThread)))
               (<! (async/timeout 10))
               (println "context hashCode after:" (.toString (Context/current)) "on thread:" (.getName (Thread/currentThread)))
               (>! hi-chan (str "hi " 1))
               (.end span-c))))
-        (.end span)))))
+        (.end span))))
   ;; LoggingSpanExporter logs:
   ;Oct 18, 2021 12:12:49 AM io.opentelemetry.exporter.logging.LoggingSpanExporter export
   ;INFO: 'child 1' : 6d2aee93b5eb61795b2ba9ad38b7cc55 621bf75dadfd64a8 INTERNAL [tracer: foo:1.0.0] {}
@@ -109,3 +109,31 @@
   ;INFO: 'child 2' : 6d2aee93b5eb61795b2ba9ad38b7cc55 bcee8987f40c0dcf INTERNAL [tracer: foo:1.0.0] {}
 
   ;; => same trace id 6d2aee93b5eb61795b2ba9ad38b7cc55
+
+  ;; Simpler solution with lexical binding:
+  (let [span (new-span "parent")]
+    (with-open [_ (.makeCurrent span)]
+      (let [context (Context/current)]                      ;; define before the thread boundarie a ref to the context
+        (thread
+          (with-open [_ (.makeCurrent context)]             ;; set the context in the scope of the new thread
+            (let [span-c (new-span "child 1")]
+              (.end span-c)
+              (println span-c))))))
+    (.end span))
+  ;; Notes:
+  ;; it works for futures, core.async
+  (let [span (new-span "parent")]
+    (with-open [_ (.makeCurrent span)]
+      (let [context (Context/current)]                      ;; define before the thread boundarie a ref to the context
+        (go
+          (with-open [_ (.makeCurrent context)]             ;; set the context in the scope of the new thread
+            (let [span-c (new-span "child 1")]
+              (.end span-c)
+              (println "child 1 on thread" (.getName (Thread/currentThread)))))
+          (<! (async/timeout 10))
+          (with-open [_ (.makeCurrent context)]             ;; set the context in the scope of the new thread
+            (let [span-c (new-span "child 2")]
+              (.end span-c)
+              (println "child 1 on thread" (.getName (Thread/currentThread)))))))
+      (.end span))))
+

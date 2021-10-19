@@ -27,6 +27,45 @@ How to wrap opentelemetry-java `Context` propagation across threads in Clojure i
 
 ### Chosen solutions
 
+#### UPDATE october 19: Solution 3: use `let` to create a [lexical scope](https://clojure.org/guides/learn/functions#_locals_and_closures)
+
+```clojure
+(let [span    (new-span "parent")]
+  (with-open [_ (.makeCurrent span)]
+    (let [context (Context/current)] ;; define before the thread boundarie a lexical binding to the context
+        (thread
+          (with-open [_ (.makeCurrent context)] ;; set the current context in the scope of the new thread
+            (let [span-c (new-span "child 1")]))))))
+```
+
+Advantages over Solution 1  (dynamic Var):
+- probably less churn since dynamic Var keeps track of "frames" that were pushed/poped
+- "faster" even if that doesn't mean anything in the context of span creation, which are not something we might do millions of times per sec in a program
+- for core.async, doesn't require a recent version of the lib with a fix for binding conveyance
+
+Ergonomic:
+
+We can imagine a macro that would remove all the boilerplate:
+
+```clojure
+(let [span    (new-span "parent")]
+  (within-span-context
+    span
+    (thread
+      (let [child (new-span "child 1")]
+        ;; ....
+        ))))
+```
+and another one that would only convey the current Context :
+
+```clojure
+(within-current-context
+    (thread
+      (let [child (new-span "child 1")]
+        ;; ....
+        )))
+```
+
 #### Solution 1: Clojure ["binding conveyance"](https://clojure.org/reference/vars#conveyance)
 
 Documentation is outdated, some concurrency functions (futures, agents) provide this, but there is also `pmap`, as well as `core.async` macros:
