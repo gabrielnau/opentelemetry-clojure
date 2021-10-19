@@ -1,22 +1,17 @@
 {:paths ["src" "resources"]
  :deps {org.clojure/clojure {:mvn/version "1.10.3"}
-
-        org.clojure/core.async {:mvn/version "1.3.618"} ;; remove or keep only in dev ?
-
         io.opentelemetry/opentelemetry-api {:mvn/version "1.7.0"}
-        ;; TODO: SDK only in dev
+        ;; TODO: SDK only in examples
+        org.clojure/core.async {:mvn/version "1.3.618"} ;; remove or keep only in dev ?
         io.opentelemetry/opentelemetry-exporter-logging {:mvn/version "1.7.0"}
         io.opentelemetry/opentelemetry-sdk {:mvn/version "1.7.0"}
         io.opentelemetry/opentelemetry-sdk-testing {:mvn/version "1.7.0"}}
-
-
 
  :aliases
  {:test
   {:extra-paths ["test"]
    :extra-deps {org.clojure/test.check {:mvn/version "1.1.0"}
-                io.github.cognitect-labs/test-runner
-                {:git/tag "v0.5.0" :git/sha "48c3c67"}}}
+                lambdaisland/kaocha {:mvn/version "1.0.902"}}}
   :build {:deps {io.github.seancorfield/build-clj
                  {:git/tag "v0.4.0" :git/sha "54e39ae"}}
           :ns-default build}}}
