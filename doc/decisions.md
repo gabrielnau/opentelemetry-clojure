@@ -50,7 +50,7 @@ Caveats:
 - it requires to change all functions to take a `Context` as a param, that's often show stopper.
 - it works only for tracing, but not for metrics or logs, because these cross-cutting concerns have to way to get the current `Context` value.
 
-#### Implicit context passing to ExecutorServices
+### Implicit context passing to ExecutorServices
 
 When we have access to the underlying `java.util.concurrent.Executor`, then we can simply use [Context/taskWrapping](https://github.com/open-telemetry/opentelemetry-java/blob/main/context/src/main/java/io/opentelemetry/context/Context.java#L114):
 
@@ -74,7 +74,7 @@ Advantages:
 Caveats:
 - it may seems "invasive", meaning changing the way a whole Executor is set might have consequences I didn't identity yet.
 
-#### Implicit context passing with Use `let` to create a [lexical scope](https://clojure.org/guides/learn/functions#_locals_and_closures)
+### Implicit context passing with Use `let` to create a [lexical scope](https://clojure.org/guides/learn/functions#_locals_and_closures)
 
 To convey the current at a thread boundary, simply create a lexical scope with a `let`: 
 ```clojure
