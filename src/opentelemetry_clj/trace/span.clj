@@ -1,5 +1,5 @@
 (ns opentelemetry-clj.trace.span
-  (:import (io.opentelemetry.api.trace SpanBuilder SpanContext SpanKind)
+  (:import (io.opentelemetry.api.trace SpanBuilder SpanContext SpanKind Tracer Span)
            (io.opentelemetry.context Context)
            (io.opentelemetry.api.common Attributes)
            (java.util.concurrent TimeUnit)
@@ -7,8 +7,14 @@
 
 (set! *warn-on-reflection* true)
 
-(defn start [^SpanBuilder span-builder]
+(defn new-builder [^Tracer tracer span-name]
+  (.spanBuilder tracer span-name))
+
+(defn ^Span start [^SpanBuilder span-builder]
   (.startSpan span-builder))
+
+(defn end [^Span span]
+  (.end span))
 
 (defn set-parent
   "Sets the parent to use from the specified Context. If not set, the value of Span.current() at startSpan() time will be used as parent.\n\nIf no Span is available in the specified Context, the resulting Span will become a root instance, as if setNoParent() had been called. "
