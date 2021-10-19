@@ -2,6 +2,9 @@
 
 Clojure wrapper of [opentelemetry-java](https://opentelemetry.io/docs/java/).
 
+OpenTelemetry separates `API` lib from `SDK` lib. Goal is to be able to use `API` code anywhere, but without any `SDK` in classpath it's almost noop.
+Thus, libraries can instrument themselves, without forcing their consumers to use OpenTelemetry.
+
 Goals:
 - thin wrapper around java classes
 - minimal overhead over the java implementation, since performance is a [stated goal](https://github.com/open-telemetry/community/blob/main/mission-vision-values.md#we-value-performance) by OpenTelemetry.
@@ -9,6 +12,14 @@ Goals:
 Non-goals:
 - TODO
 - Provide an alternative in-process Context propagation mechanism than the thread-local one from opentelemetry-java 
+
+## Usage
+
+Run examples in a REPL:
+
+```
+clj -A:example
+```
 
 ## TODO:
 

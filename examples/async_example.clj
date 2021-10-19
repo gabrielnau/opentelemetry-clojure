@@ -1,6 +1,5 @@
-(ns gabrielnau.examples
+(ns async-example
   (:require
-    [gabrielnau.context-propagation :as context-propagation]
     [clojure.core.async :as async :refer [>! <! >!! <!! go chan buffer close! thread
                                           alts! alts!! timeout]])
   (:import (io.opentelemetry.exporter.logging LoggingSpanExporter)
@@ -8,6 +7,7 @@
            (io.opentelemetry.sdk.trace.export SimpleSpanProcessor)
            (io.opentelemetry.sdk OpenTelemetrySdk)
            (io.opentelemetry.context Context)))
+
 
 ;; draft
 ;; in production, it would live in a component
@@ -24,15 +24,16 @@
   [name]
   (-> (.spanBuilder tracer name) .startSpan))
 
+(def ^:dynamic *current-context*)
 
 (comment
 
   ;; core/future example without agent executor wrapped
   (let [span (new-span "parent")]
     (with-open [_ (.makeCurrent span)]
-      (with-bindings {#'context-propagation/*current-context* (Context/current)}
+      (with-bindings {#'*current-context* (Context/current)}
         @(future
-           (with-open [_ (.makeCurrent context-propagation/*current-context*)]
+           (with-open [_ (.makeCurrent *current-context*)]
              (let [span-c (new-span "child")]
                (.end span-c))))))
     (.end span))
@@ -77,18 +78,18 @@
     ;; ---
     ;; this boilerplate could be done in a macro:
     (with-open [_ (.makeCurrent span)]                      ;; Context set current value
-      (with-bindings {#'context-propagation/*current-context* (Context/current)} ;; store on thread local current context
+      (with-bindings {#'*current-context* (Context/current)} ;; store on thread local current context
         ;; ----
 
         ;; 1. validate core.async/thread binding conveyance
         (thread
-          (with-open [_ (.makeCurrent context-propagation/*current-context*)] ;; TODO: macro with a more meaningful name than this
+          (with-open [_ (.makeCurrent *current-context*)] ;; TODO: macro with a more meaningful name than this
             (let [span-c (new-span "child 1")]
               (.end span-c))))
 
         ;; 2. validate core.async/go binding conveyance
         (go
-          (with-open [_ (.makeCurrent context-propagation/*current-context*)]
+          (with-open [_ (.makeCurrent *current-context*)]
             (let [span-c    (new-span "child 2")
                   context-1 (Context/current)]
               (println "context hashCode before:" (.toString context-1) "on thread:" (.getName (Thread/currentThread)))
