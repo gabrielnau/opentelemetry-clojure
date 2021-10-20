@@ -26,7 +26,7 @@
                 (span/set-kind :server)
                 span/start)]
      (Thread/sleep 100)
-     (with-open [_ (context/make-current! span)]
+     (with-open [_ (-> (Context/current) (.with span) .makeCurrent)]
        (let [context (context/current)]
          (a/thread
            (println "c" context)
