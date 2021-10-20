@@ -13,9 +13,9 @@
             [hikari-cp.core :refer :all]
             [next.jdbc :as jdbc]
             [next.jdbc.connection :as connection])
-  (:import (com.zaxxer.hikari HikariDataSource))
-
-  (:import (io.opentelemetry.api GlobalOpenTelemetry)))
+  (:import (io.opentelemetry.api GlobalOpenTelemetry)
+           (io.opentelemetry.context Context)
+           (com.zaxxer.hikari HikariDataSource)))
 
 ;; tracer instance
 (def tracer (GlobalOpenTelemetry/getTracer "jetty-handler"))
@@ -29,9 +29,8 @@
      (with-open [_ (-> (Context/current) (.with span) .makeCurrent)]
        (let [context (context/current)]
          (a/thread
-           (println "c" context)
            (with-open [_ (context/make-current! context)]
-             (jdbc/execute! (db) ["SELECT 'hello world'"]))
+             (jdbc/execute! db ["SELECT 'hello world'"]))
            (span/end span)
            {:status 200, :headers {}, :body "Hello World"}))))))
 
@@ -48,28 +47,31 @@
     (ring/router
       ["/ping" {:get {:handler (partial handler db)}}])))
 
-(defmethod ig/init-key :example/db [_ {:keys [port username password]}]
-  (connection/->pool HikariDataSource {:dbtype "postgresql" :dbname "postgres" :port port :username username :password password}))
+(defmethod ig/init-key :example/db [_ _]
+  (let [ds (connection/->pool HikariDataSource {:dbtype "postgres" :dbname "postgres" :username "postgres" :password "changeme"})]
+    (.close (jdbc/get-connection ds))                       ;; initializes the pool and performs a validation check:
+    ds))
 
 (defmethod ig/halt-key! :example/db [_ datasource]
   (.close datasource))
 
-(def runtime-system (atom nil))
 (def system-config
   {:example/jetty   {:port    3000
                      :join?   false
                      :async?  false
                      :handler (ig/ref :example/handler)}
-   :example/db      {:port     5431
-                     :username "postgres"
-                     :password "changeme"}
+   :example/db      {}
    :example/handler {:db (ig/ref :example/db)}})
 
 
-(defn start []
-   (reset! runtime-system (ig/init system-config))
-  :ok)
+(def system (ig/init system-config))
+;(defn start []
+;   (reset! runtime-system (ig/init system-config))
+;  :ok)
 
 (defn stop []
-  (ig/halt! @runtime-system))
+  (ig/halt! system))
+
+(comment
+  (start))
 
