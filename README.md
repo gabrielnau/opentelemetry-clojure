@@ -39,6 +39,7 @@ bin/kaocha
 - TODO: leverage Clojure native immutable implementation where possible instead of having the cost to convert a Clojure objects to a (immutable) OTEL ones ?
   - Candidates which are immutable: Bagage, Attribute, SpanContexts, TraceState, Resource, Context ?
     - TODO: evaluate what it would mean to implement completely Context and Storage provider in Clojure ? could we expect some simplicity and eventually perf gain ?
+    - Discarded solution: clojure dynamic scope with a ^dynamic Var + with-binding macro because it's [way slower than Java ThreadLocal API](https://tech.redplanetlabs.com/2020/09/02/clojure-faster/#dynamic-vars)
 
 ### Cross-cutting concern
 
@@ -170,6 +171,7 @@ We have to differentiate 2 use cases:
     - could be interesting to check https://github.com/jetty-project/jetty-load-generator
     - would be interesting to have an example implementation e2e with dummy db backends and being able to load test it, to identity churn etc
     - see https://github.com/bsless/stress-server
+    - might not be useful at all, but it can be interesting to use [no.disassemble](https://tech.redplanetlabs.com/2020/09/02/clojure-faster/#dramatic-gains-with-type-hinting) 
   - clj linter ? https://github.com/clj-kondo/clj-kondo
   - Implement Bagage ~= attributes shared by spans
     - idea: implement custom version where all immutability things are removed since we are in clojure land already

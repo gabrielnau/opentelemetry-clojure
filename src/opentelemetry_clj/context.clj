@@ -29,10 +29,22 @@
 (defn wrap-future-executor
   "that's actually the Agent send-off executor
   Context/current will be correct inside a future body
+  TODO: example code
+
+
   "
   []
   ;; clojure.lang.Agent/soloExecutor
   (set-agent-send-off-executor! (wrap-executor clojure.lang.Agent/soloExecutor)))
+
+(comment
+  (wrap-future-executors)
+  (let [span (new-span "parent")]
+    (with-open [_ (.makeCurrent span)]
+      @(future
+         (let [span-child (new-span "child")]
+           (.end span-child))))
+    (.end span)))
 
 (defn wrap-agent-executors []
   (set-agent-send-off-executor! (wrap-executor clojure.lang.Agent/soloExecutor))
@@ -62,3 +74,35 @@
   (.makeCurrent context))
 
 ;; TODO: wrap callabla and runnable, .with, and .get -> see if we can datafy and to-map
+
+;; Conveyance:
+
+(comment
+
+  ;; Simpler solution with lexical binding:
+  (let [span (new-span "parent")]
+    (with-open [_ (.makeCurrent span)]
+      (let [context (Context/current)]                      ;; define before the thread boundarie a ref to the context
+        (thread
+          (with-open [_ (.makeCurrent context)]             ;; set the context in the scope of the new thread
+            (let [span-c (new-span "child 1")]
+              (.end span-c)
+              (println span-c))))))
+    (.end span))
+  ;; Notes:
+  ;; it works for futures, core.async
+  (let [span (new-span "parent")]
+    (with-open [_ (.makeCurrent span)]
+      (let [context (Context/current)]                      ;; define before the thread boundarie a ref to the context
+        (go
+          (with-open [_ (.makeCurrent context)]             ;; set the context in the scope of the new thread
+            (let [span-c (new-span "child 1")]
+              (.end span-c)
+              (println "child 1 on thread" (.getName (Thread/currentThread)))))
+          (<! (async/timeout 10))
+          (with-open [_ (.makeCurrent context)]             ;; set the context in the scope of the new thread
+            (let [span-c (new-span "child 2")]
+              (.end span-c)
+              (println "child 1 on thread" (.getName (Thread/currentThread)))))))
+      (.end span))))
+
