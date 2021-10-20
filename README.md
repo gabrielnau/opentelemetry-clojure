@@ -8,6 +8,7 @@ Thus, libraries can instrument themselves, without forcing their consumers to us
 Goals:
 - thin wrapper around java classes
 - minimal overhead over the java implementation, since performance is a [stated goal](https://github.com/open-telemetry/community/blob/main/mission-vision-values.md#we-value-performance) by OpenTelemetry.
+- TODO find upstream OpenTelemetry wording, but basically: say this wrapper can be used by library authors as the upstream java lib expects it. it does so by not including the SDK deps, only the API ones. meaning a clojure lib that instruments its code with opentelemetry-clojure will not forces its users to use opentelemetry at all.
 
 Non-goals:
 - provide opinionated solution concerning in-process context propagation between threads, instead provide several solutions and document their caveats.
@@ -21,17 +22,71 @@ Run examples in a REPL:
 clj -A:example
 ```
 
+Jetty example:
+
+1. `cd examples; docker-compose up`
+2. `clj -A:example`
+
 Run tests:
 
 ```
 bin/kaocha
 ```
 
-## TODO:
+## Documentation (WIP, unstructured)
 
+### Thread safety
+
+- say these APIs are thread safe: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/api.md#concurrency
+- Context is immutable
+
+### Cross-cutting concern
+
+- note about OTEL being a cross-cutting concern https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/overview.md#opentelemetry-client-architecture
+
+### Artifacts etc
+
+- opentelemetry-java provides the otel API and the default SDK implementation, along with various plugins like exporters, span processors, etc, but no actual instrumentation of anything useful
+- opentelemetry-java-instrumentation has 2 things. One: some “library” instrumentation which you can put on your classpath and just use as-is. Two: A full-featured javaagent that does auto-instrumentation via bytecode manipulation. (edited)
+  - So, for example, if you use the okhttp “library” instrumentation, there’s a class that will wrap your OkHttpClient and generate spans and metrics using the otel APIs.
+  - example: https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/instrumentation/okhttp/okhttp-3.0/library
+  - 
+
+### To use or not use the autoinstrumentation agent
+
+When using Agent, you get the following constraints / caveats:
+
+- "direct usage of the OpenTelemetry SDK is not supported when running agent" TODO: source
 - Span implementation when using autoinstrumentation java agent differs from the one from the SDK
-  - ask why in a github issue
-  - document the behavior in the documentation here as a caveat
+  - TODO: ask about this on cncf slack, Span doesn't implement Context interface in agent but it does in api
+- tracer is built by the agent, thus need to use auto configuration or ?
+- Javaagent version vs SDK version, see this slack message:
+  > We support all OTel APIs up to the version of the javaagent, but not necessarily newer. The assumption is it’s generally at least as easy to update the javaagent version as an app. And while not impossible for all cases, it’s hard to guarantee compatibility with something that doesn’t exist yet
+- https://github.com/open-telemetry/opentelemetry-java-instrumentation/issues/1926
+
+How to leverage [supported libraries, frameworks etc](https://github.com/open-telemetry/opentelemetry-java-instrumentation/blob/main/docs/supported-libraries.md) without running the agent ?
+- example: https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/instrumentation/okhttp/okhttp-3.0/library
+
+### How to get a Tracer
+
+- > Note that there is no need to "set" a tracer by name before getting it. The getTracer method always returns a handle to the same tracing client. The name you provide is to help identify which component generated which spans, and to potentially disable tracing for individual components.
+  We recommend calling getTracer once per component during initialization and retaining a handle to the tracer, rather than calling getTracer repeatedly.
+  This should be configured as early as possible in the entry point of your application. Keep in mind, this builder is not required if the agent is in use.
+- explain when using agent or not
+
+## Understand which ContextStorage provider is used
+
+java agent: 
+- with -> see how this works
+- without: default to ThreadLocalContextStorage
+
+## Roadmap :
+
+1. Wrapper for OTEL Tracing API and with 
+2. Provide extensive examples and documentation with usual Clojure stack: jetty, netty, core.async, manifold, logback config,
+3. Load test example app with correctness validation (convey trace id in the request body to assert down the execution path correct spans) + Profiling, etc 
+
+## TODO :
 
 - Tracing:
   - implement Tracer interface
@@ -40,8 +95,10 @@ bin/kaocha
     - option 1: include auto instrumentation artifact and use global singleton https://www.javadoc.io/static/io.opentelemetry/opentelemetry-api/1.0.1/io/opentelemetry/api/GlobalOpenTelemetry.html
     - option 2: manually build it with OpenTelemetrySdk.builder (in SDK then, not API).
     - About don't run twice instanciation: https://github.com/open-telemetry/opentelemetry-java/issues/3717 >> GlobalOpenTelemetry vs javaagent ?
-    - it will rely on opentelemetry-sdk, and since we don't want to include it in the released lib, maybe do a sub deps project that does only the component / system thing ?
     - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#forceflush-1
+  - Leverage manual instrumented libraries without the agent:
+    - example: https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/instrumentation/okhttp/okhttp-3.0/library
+    - it could be a good solution to avoid the agent pitfalls while leveraging instrumented libs like jetty, jdbc etc
   - implement all SpanBuilder interface:
     - Events
     - Links https://javadoc.io/static/io.opentelemetry/opentelemetry-api/1.7.0/io/opentelemetry/api/trace/SpanBuilder.html
@@ -66,11 +123,6 @@ bin/kaocha
       - http://logback.qos.ch/manual/mdc.html
     - https://github.com/newrelic/newrelic-opentelemetry-examples/tree/main/java/logs-in-context-log4j2
     - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/error-handling.md#java
-  - Debug issue when instrumentation javaagent is running alonside
-    - this simple code doesn't work with javaagent: https://gist.github.com/gabrielnau/2c0f8eb09d801c8e911bfa5a9334db0a
-    - context storage is in the agent not in the thread local
-    - https://github.com/open-telemetry/opentelemetry-java-instrumentation/issues/1926
-    - javaagent preempting the context storage, it might break our thread local implementation ?
   - reducers not supported: add in documentation + explore if possible to change that
   - Test this debug mechanism:
     > We provide a debug mechanism for context propagation, which can be enabled by
@@ -93,6 +145,8 @@ bin/kaocha
       - https://github.com/hugoduncan/criterium
       - https://github.com/jgpc42/jmh-clojure
     - could be interesting to check https://github.com/jetty-project/jetty-load-generator
+    - would be interesting to have an example implementation e2e with dummy db backends and being able to load test it, to identity churn etc
+    - see https://github.com/bsless/stress-server
   - integration testing
     - validate with a javaagent, for example: Netty (autoinstrumented) -> Aleph (manual) -> App code (manual) -> JDBC (auto)
     - https://github.com/BrunoBonacci/mulog/issues/52
@@ -105,32 +159,34 @@ bin/kaocha
   - Attributes limits: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/common.md#attribute-limits
     - explore this API and how it behaves
   - Documentation
-    - say these APIs are thread safe: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/api.md#concurrency
     - cljdoc https://github.com/cljdoc/cljdoc/blob/master/doc/userguide/for-library-authors.adoc
     - Docs: https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/docs
     - [Introduction to OpenTelemetry](https://www.youtube.com/watch?v=_OXYCzwFd1Y)
-    - > Note that there is no need to "set" a tracer by name before getting it. The getTracer method always returns a handle to the same tracing client. The name you provide is to help identify which component generated which spans, and to potentially disable tracing for individual components.
-      We recommend calling getTracer once per component during initialization and retaining a handle to the tracer, rather than calling getTracer repeatedly.
-      This should be configured as early as possible in the entry point of your application. Keep in mind, this builder is not required if the agent is in use.
-    - note about OTEL being a cross-cutting concern https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/overview.md#opentelemetry-client-architecture
     - should use the BOM but can't: https://clojure.atlassian.net/browse/TDEPS-202 ```clj -Stree '{:deps {io.opentelemetry/opentelemetry-bom {:mvn/version "1.7.0" :extension "pom"}}}'```
-    - say this wrapper can be used by library authors as the upstream java lib expects it. it does so by not including the SDK deps, only the API ones. meaning a clojure lib that instruments its code with opentelemetry-clojure will not forces its users to use opentelemetry at all.
     - Propagator W3C: async and sync Ring middleware implementation
       - check semantic conventions
         - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/semantic_conventions/http.md
         - https://github.com/open-telemetry/opentelemetry-java-instrumentation/blob/main/docs/semantic-conventions.md
         - https://github.com/open-telemetry/opentelemetry-specification/tree/main/specification/trace/semantic_conventions
       - Note about: span per retry in http query https://neskazu.medium.com/thoughts-on-http-instrumentation-with-opentelemetry-9fc22fa35bc7 + So for the sake of consistency and to give users better observability, I believe each redirect should be a separate HTTP span.
-      - middleware will be in hot path, really needs to be as performant as possible 
+      - middleware will be in hot path, really needs to be as performant as possible
 - Metrics
   - start to explore the Java doc, even if its still alpha
   - conventions: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/metrics/semantic_conventions/README.md
+  - Interesting Datadog issue with cumulative vs delta: https://cloud-native.slack.com/archives/C0150QF88FL/p1633960889159200
 - Release as a clojure lib:
   - don't depend on latest clojure ? 
   - check for build, CI for open source
   - how to publish to clojars
   - see clojurians announcements and tracing channels to gather feedback + https://clojureverse.org/c/showcase/your-projects-and-libraries/35
+- Bookmars:
+  - Programmatic injection of agent https://cloud-native.slack.com/archives/C0150QF88FL/p1632249888088300?thread_ts=1631980158.059400&cid=C0150QF88FL
 
 To ask on Clojurians:
-- what is the cost of reading / writing a thread local ?
 - is it risky to wrap the core.async executor ?
+
+To ask on CNCF Slack:
+- Span implementation when using autoinstrumentation java agent differs from the one from the SDK
+  - ask why in a github issue
+  - (with-open [_ (-> (Context/current) (.with span) .makeCurrent)] versus makeCurrent in docs
+- is it true to say, we want to maintain a valid `Context.current()` accross the entire code execution path ?
