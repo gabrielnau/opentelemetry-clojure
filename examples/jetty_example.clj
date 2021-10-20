@@ -1,18 +1,17 @@
 (ns jetty-example
-  (:require [reitit.http :as http]
-            [reitit.ring :as ring]
-            [reitit.interceptor.sieppari]
-            [sieppari.async.core-async]                     ;; needed for core.async
-            [sieppari.async.manifold]                       ;; needed for manifold
+  (:require [reitit.ring :as ring]
             [ring.adapter.jetty :as jetty]
+            [integrant.core :as ig]
             [muuntaja.interceptor]
+            [reitit.interceptor.sieppari]
+            [sieppari.async.core-async]
+            [sieppari.async.manifold]
             [clojure.core.async :as a]
             [manifold.deferred :as d]
             [opentelemetry-clj.trace.span :as span]
             [opentelemetry-clj.context :as context]
             [hikari-cp.core :refer :all]
             [next.jdbc :as jdbc]
-            [com.stuartsierra.component :as component]
             [next.jdbc.connection :as connection])
   (:import (com.zaxxer.hikari HikariDataSource))
 
@@ -21,38 +20,8 @@
 ;; tracer instance
 (def tracer (GlobalOpenTelemetry/getTracer "jetty-handler"))
 
-;; JDBC
-(def datasource-component (atom nil))
-
-(defn start-jdbc []
-  (let [ds (component/start (connection/component
-                              HikariDataSource
-                              {:dbtype "postgresql"
-                               :dbname "postgres"
-                               :port 5431
-                               :username "postgres"
-                               :password "changeme"}))]
-    (reset! datasource-component ds)
-    (jdbc/execute! (ds) ["SELECT 'hello world'"])))
-
-(defn stop-jdbc []
-  (component/stop @datasource-component))
-
-;; Ring / Reitit
-
-;(defn interceptor [f x]
-;  {:enter (fn [ctx] (f (update-in ctx [:request :via] (fnil conj []) {:enter x})))
-;   :leave (fn [ctx] (f (update-in ctx [:response :body] conj {:leave x})))})
-
-
-;(def <sync> identity)
-;(def <future> #(future %))
-;(def <async> #(a/go %))
-;(def <deferred> d/success-deferred)
-
-
 (defn handler
-  ([request]
+  ([db request]
    (let [span (-> (span/new-builder tracer "FOO 1")
                 (span/set-kind :server)
                 span/start)]
@@ -62,57 +31,45 @@
          (a/thread
            (println "c" context)
            (with-open [_ (context/make-current! context)]
-             (jdbc/execute! (@datasource-component) ["SELECT 'hello world'"]))
+             (jdbc/execute! (db) ["SELECT 'hello world'"]))
            (span/end span)
-           {:status 200, :headers {}, :body "Hello World"})))))
-  ([request respond raise]))
-   ;;TODO))
+           {:status 200, :headers {}, :body "Hello World"}))))))
 
+;; Integrant wiring
 
+(defmethod ig/init-key :example/jetty [_ {:keys [port join? handler async?]}]
+  (jetty/run-jetty handler {:port port :join? join? :async? async?}))
 
+(defmethod ig/halt-key! :example/jetty [_ server]
+  (.join server))
 
+(defmethod ig/init-key :example/handler [_ {:keys [db]}]
+  (ring/ring-handler
+    (ring/router
+      ["/ping" {:get {:handler (partial handler db)}}])))
 
-(def router
-  (ring/router
-    ["/ping" {:get handler}]))
+(defmethod ig/init-key :example/db [_ {:keys [port username password]}]
+  (connection/->pool HikariDataSource {:dbtype "postgresql" :dbname "postgres" :port port :username username :password password}))
 
-(def app
-  (ring/ring-handler router))
+(defmethod ig/halt-key! :example/db [_ datasource]
+  (.close datasource))
 
-       ;["/sync"
-       ; {:interceptors [(interceptor <sync> :sync)]
-       ;  :get {:interceptors [(interceptor <sync> :get)]
-       ;        :handler (handler <sync>)}}]
-       ;
-       ;["/future"
-       ; {:interceptors [(interceptor <future> :future)]
-       ;  :get {:interceptors [(interceptor <future> :get)]
-       ;        :handler (handler <future>)}}](
-       ;
-       ;["/async"
-       ; {:interceptors [(interceptor <async> :async)]
-       ;  :get {:interceptors [(interceptor <async> :get)]
-       ;        :handler (handler <async>)}}]
-       ;
-       ;["/deferred"
-       ; {:interceptors [(interceptor <deferred> :deferred)]
-       ;  :get {:interceptors [(interceptor <deferred> :get)]
-       ;        :handler (handler <deferred>)}}]])))
-(def server (atom nil))
+(def runtime-system (atom nil))
+(def system-config
+  {:example/jetty   {:port    3000
+                     :join?   false
+                     :async?  false
+                     :handler (ig/ref :example/handler)}
+   :example/db      {:port     5431
+                     :username "postgres"
+                     :password "changeme"}
+   :example/handler {:db (ig/ref :example/db)}})
 
 
 (defn start []
-  (let [jetty (jetty/run-jetty #'app {:port 3000, :join? false, :async? true})]
-    (reset! server jetty)
-    (println "server running in port 3000")))
+   (reset! runtime-system (ig/init system-config))
+  :ok)
 
 (defn stop []
-  (when @server
-    (.join @server)))
+  (ig/halt! @runtime-system))
 
-;; Tracer
-
-(comment
-  (stop)
-
-  (start))

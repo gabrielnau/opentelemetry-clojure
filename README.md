@@ -35,6 +35,7 @@ bin/kaocha
 
 - Tracing:
   - implement Tracer interface
+    - possible to use Component but why ? we don't do that for logging or metrics usually, that's a global singleton
     - can't make SDK dependency "provided"
     - option 1: include auto instrumentation artifact and use global singleton https://www.javadoc.io/static/io.opentelemetry/opentelemetry-api/1.0.1/io/opentelemetry/api/GlobalOpenTelemetry.html
     - option 2: manually build it with OpenTelemetrySdk.builder (in SDK then, not API).
