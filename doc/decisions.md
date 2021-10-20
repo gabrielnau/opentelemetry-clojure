@@ -12,10 +12,11 @@ It is also stated that it's up to the instrumentation author to carry the `Conte
 
 **Problem statement :**
 
-How to wrap opentelemetry-java `Context` propagation across threads in Clojure in order to support its concurrency primitives, like `core/future` or `core.async` ?
+When doing manual instrumentation, we have to manage `Context` conveyance in-process in order to have a correct `Context.current()` value at any point in the code execution path, so that cross-cutting concerns like metrics and logs can be enriched with correlation data.
+How to manage this in Clojure in order to support its concurrency primitives, like `core/future` or `core.async` ?
 
 Constraints:
-- Since we want to support OpenTelemetry traces, but also metrics and logs, we have to ensure `Span.current()` and `Context.current()` return correct value everywhere down the code execution path.
+- Since we want to support OpenTelemetry traces, but also metrics and logs, we have to ensure `Span.current()` and `Context.current()` return correct value everywhere down the code execution path. Default implementation stores them on thread locals.
 - We would like to limit the boilerplate needed to manage this, interleaving OpenTelemetry code with app code should add as few as possible complexity.
 - While wrapping the Java lib, leave all decisions to instrumentation author, meaning the Clojure wrapper isn't opinionated as to how do things ideally.
 - There is an auto instrumentation java agent available, which override some default behaviors from the SDK. Solutions should work both with this agent injected or not. 
