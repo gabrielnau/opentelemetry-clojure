@@ -22,34 +22,6 @@ Constraints:
 
 ## Solutions
 
-### Explicit context passing
-
-Meaning we could pass as function argument the current `Context` down all of the code execution path. This would be way more "pure" but there is a caveat to this approach, there are explained in this video: [The painful simplicity of context propagation in Go](https://www.youtube.com/watch?v=g4ShnfmHTs4).
-
-```clojure
-(defn child-fn [parent-span]
-  (future ;; thread boundary
-    (let [parent-context (-> (Context/current) (.with parent-span))
-          child-span (-> (.spanBuilder tracer "child-span")
-                       (.setParent parent-context)
-                       .start)])))
-          ;; => child-span is nested in parent-span 
-
-(defn parent-fn []
-  (let [parent-span (-> (.spanBuilder tracer "parent-span") .start)]
-    (.makeCurrent parent-span) ;; => (Context/current) returns the parent span context
-    (child-fn parent-span)))
-```
-
-When needed, `Context` could also be conveyed through core.async channels, either as an explicit tuple [msg context] or implicitly using `with-meta`. 
-
-Advantages:
-- In Clojure, we are more used to values flowing in our programs, instead of some brittle shared state 
-
-Caveats:
-- it requires to change all functions to take a `Context` as a param, that's often show stopper.
-- it works only for tracing, but not for metrics or logs, because these cross-cutting concerns have to way to get the current `Context` value.
-
 ### Implicit context passing to ExecutorServices
 
 When we have access to the underlying `java.util.concurrent.Executor`, then we can simply use [Context/taskWrapping](https://github.com/open-telemetry/opentelemetry-java/blob/main/context/src/main/java/io/opentelemetry/context/Context.java#L114):
@@ -101,7 +73,10 @@ Caveats:
 
 **What about core.async ?**
 
-Inside a `go` block, work on thread may park and then resume on another thread, which means our current context in thread locals would be not set when resuming.
+It works well when we are in the lexical scope, with `go` and `thread`. When outside of lexical scope, ie code execution path having core.async channels in the middle, then we will have to convey the Context alongside the data. See next section. 
+
+Caveat:
+- Inside a `go` block, work on thread may park and then resume on another thread, which means our current context in thread locals would be not set when resuming.
 
 Example:
 ```clojure
@@ -122,3 +97,33 @@ Solutions to explore:
 - macros to hide the boilerplate needed + clear documentation about this caveat
 - inside a go block, don't try to have the correct `Context/current` value, knowing that metrics and logs generated from within the go block will lack correct correlation data.
 
+### Explicit context passing
+
+Meaning we could pass as function argument the current `Context` down all of the code execution path. This would be way more "pure" but there is a caveat to this approach, there are explained in this video: [The painful simplicity of context propagation in Go](https://www.youtube.com/watch?v=g4ShnfmHTs4).
+
+```clojure
+(defn child-fn [parent-span]
+  (future ;; thread boundary
+    (let [parent-context (-> (Context/current) (.with parent-span))
+          child-span (-> (.spanBuilder tracer "child-span")
+                       (.setParent parent-context)
+                       .start)])))
+          ;; => child-span is nested in parent-span 
+
+(defn parent-fn []
+  (let [parent-span (-> (.spanBuilder tracer "parent-span") .start)]
+    (.makeCurrent parent-span) ;; => (Context/current) returns the parent span context
+    (child-fn parent-span)))
+```
+
+Advantages:
+- In Clojure, we are more used to values flowing in our programs, instead of some brittle shared state
+
+Caveats:
+- it requires to change all functions to take a `Context` as a param, that's often show stopper.
+- it works only for tracing, but not for metrics or logs, because these cross-cutting concerns have to way to get the current `Context` value.
+
+**What about core.async ?**
+
+When needed, `Context` could also be conveyed through core.async channels, either as an explicit tuple [msg context] or implicitly using `with-meta`.
+TODO: see if there is any caveat to use `with-meta` instead of a tuple or anything else, how is it stored in memory ? We don't want to misuse the clojure meta api.

@@ -2,13 +2,11 @@
 
 Clojure wrapper of [opentelemetry-java](https://opentelemetry.io/docs/java/).
 
-OpenTelemetry separates `API` lib from `SDK` lib. Goal is to be able to use `API` code anywhere, but without any `SDK` in classpath it's almost noop.
-Thus, libraries can instrument themselves, without forcing their consumers to use OpenTelemetry.
-
 Goals:
-- thin wrapper around java classes
+- Thin wrapper around java classes
 - minimal overhead over the java implementation, since performance is a [stated goal](https://github.com/open-telemetry/community/blob/main/mission-vision-values.md#we-value-performance) by OpenTelemetry.
 - TODO find upstream OpenTelemetry wording, but basically: say this wrapper can be used by library authors as the upstream java lib expects it. it does so by not including the SDK deps, only the API ones. meaning a clojure lib that instruments its code with opentelemetry-clojure will not forces its users to use opentelemetry at all.
+  - OpenTelemetry separates `API` lib from `SDK` lib. Goal is to be able to use `API` code anywhere, but without any `SDK` in classpath it's almost noop.  Thus, libraries can instrument themselves, without forcing their consumers to use OpenTelemetry.
 
 Non-goals:
 - provide opinionated solution concerning in-process context propagation between threads, instead provide several solutions and document their caveats.
@@ -38,11 +36,14 @@ bin/kaocha
 ### Thread safety
 
 - say these APIs are thread safe: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/api.md#concurrency
-- Context is immutable
+- TODO: leverage Clojure native immutable implementation where possible instead of having the cost to convert a Clojure objects to a (immutable) OTEL ones ?
+  - Candidates which are immutable: Bagage, Attribute, SpanContexts, TraceState, Resource, Context ?
+    - TODO: evaluate what it would mean to implement completely Context and Storage provider in Clojure ? could we expect some simplicity and eventually perf gain ?
 
 ### Cross-cutting concern
 
 - note about OTEL being a cross-cutting concern https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/overview.md#opentelemetry-client-architecture
+- Constraint on ensuring that `Context.current()` is always correct in every part of the code execution path, to ensure correlation data is available and correct.
 
 ### Artifacts etc
 
@@ -52,7 +53,7 @@ bin/kaocha
   - example: https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/instrumentation/okhttp/okhttp-3.0/library
   - 
 
-### To use or not use the autoinstrumentation agent
+### To use or not the auto-instrumentation agent
 
 When using Agent, you get the following constraints / caveats:
 
@@ -74,17 +75,37 @@ How to leverage [supported libraries, frameworks etc](https://github.com/open-te
   This should be configured as early as possible in the entry point of your application. Keep in mind, this builder is not required if the agent is in use.
 - explain when using agent or not
 
-## Understand which ContextStorage provider is used
+### Understand which ContextStorage provider is used
 
 java agent: 
 - with -> see how this works
 - without: default to ThreadLocalContextStorage
 
+### Concurrency primitives
+
+#### future
+
+Solution 1: implicitely convey the Context to the Executor
+Downsides:
+- can be intrusive, and it wraps Agent executor as well
+
+Solution 2: wrap in a lexical scope
+
+#### core.async
+
+We have to differentiate 2 use cases:
+
+1. We use a `go` block or a `thread`: wrap in a lexical scope
+  - warning about go block and parking/resume on another thread -> macro to help maintain the correct thread local storage
+2. We don't have it, need to convey value in channel: todo example of code with aleph for example
+
 ## Roadmap :
 
-1. Wrapper for OTEL Tracing API and with 
-2. Provide extensive examples and documentation with usual Clojure stack: jetty, netty, core.async, manifold, logback config,
-3. Load test example app with correctness validation (convey trace id in the request body to assert down the execution path correct spans) + Profiling, etc 
+1. Wrapper for OTEL Tracing API and with unopinionated solutions for `Context` conveyance accross threads in usual Clojure stack:
+  - future, core.async go and thread, core.async channels, manifold, CompletableFuture etc
+3. Provide extensive examples and documentation with usual Clojure stack:
+  - jetty, netty, logback config
+5. Load test example app with correctness validation (convey trace id in the request body to assert down the execution path correct spans) + Profiling, etc 
 
 ## TODO :
 
@@ -111,8 +132,7 @@ java agent:
     - instead see https://clojure.github.io/clojure/clojure.datafy-api.html
   - Namespace with Stuart Sierra's component of the tracer
     - see graceful shutdown https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#shutdown
-  - Support auto configuration https://github.com/open-telemetry/opentelemetry-java/tree/main/sdk-extensions/autoconfigure
-  - See naming conventions
+  - Review naming conventions
     - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/resource/semantic_conventions/README.md
   - Logger configuration
     - https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/instrumentation/logback-1.0/library
@@ -124,15 +144,18 @@ java agent:
     - https://github.com/newrelic/newrelic-opentelemetry-examples/tree/main/java/logs-in-context-log4j2
     - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/error-handling.md#java
   - reducers not supported: add in documentation + explore if possible to change that
-  - Test this debug mechanism:
-    > We provide a debug mechanism for context propagation, which can be enabled by
+  - Testing :
+    - use this: "We provide a debug mechanism for context propagation, which can be enabled by
     setting {@code -Dio.opentelemetry.context.enableStrictContext=true} in your JVM args. This will
     enable a strict checker that makes sure that {@link Scope}s are closed on the correct thread and
     that they are not garbage collected before being closed. This is done with some relatively
     expensive stack trace walking. It is highly recommended to enable this in unit tests and staging
     environments, and you may consider enabling it in production if you have the CPU budget or have
     very strict requirements on context being propagated correctly (i.e., because you use context in
-    a multi-tenant system).
+    a multi-tenant system)."
+    - integration testing
+      - validate with a javaagent, for example: Netty (autoinstrumented) -> Aleph (manual) -> App code (manual) -> JDBC (auto)
+      - https://github.com/BrunoBonacci/mulog/issues/52
   - Performance:
     ~~- why `Context.wrap` doesn't close the `Scope` ?~~ 
     - get a Yourkit licence for open source project: https://www.yourkit.com/java/profiler/purchase/#os_license
@@ -147,9 +170,6 @@ java agent:
     - could be interesting to check https://github.com/jetty-project/jetty-load-generator
     - would be interesting to have an example implementation e2e with dummy db backends and being able to load test it, to identity churn etc
     - see https://github.com/bsless/stress-server
-  - integration testing
-    - validate with a javaagent, for example: Netty (autoinstrumented) -> Aleph (manual) -> App code (manual) -> JDBC (auto)
-    - https://github.com/BrunoBonacci/mulog/issues/52
   - clj linter ? https://github.com/clj-kondo/clj-kondo
   - Implement Bagage ~= attributes shared by spans
     - idea: implement custom version where all immutability things are removed since we are in clojure land already
@@ -170,6 +190,7 @@ java agent:
         - https://github.com/open-telemetry/opentelemetry-specification/tree/main/specification/trace/semantic_conventions
       - Note about: span per retry in http query https://neskazu.medium.com/thoughts-on-http-instrumentation-with-opentelemetry-9fc22fa35bc7 + So for the sake of consistency and to give users better observability, I believe each redirect should be a separate HTTP span.
       - middleware will be in hot path, really needs to be as performant as possible
+    - auto configuration https://github.com/open-telemetry/opentelemetry-java/tree/main/sdk-extensions/autoconfigure
 - Metrics
   - start to explore the Java doc, even if its still alpha
   - conventions: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/metrics/semantic_conventions/README.md
