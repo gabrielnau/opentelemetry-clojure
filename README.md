@@ -82,6 +82,37 @@ java agent:
 - with -> see how this works
 - without: default to ThreadLocalContextStorage
 
+### Attributes
+
+- best practices: https://opentelemetry.lightstep.com/best-practices/using-attributes/
+- Recommendations for app devs: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/attribute-naming.md#recommendations-for-application-developers
+- Naming: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/attribute-naming.md
+
+Spec: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/common.md#attributes
+
+An immutable container for attributes. -> looks like a clojure map
+The keys are AttributeKeys and the values are Object instances that match the type of the provided key.
+Null keys will be silently dropped. -> possible
+Note: The behavior of null-valued attributes is undefined, and hence strongly discouraged.
+Implementations of this interface *must* be immutable and have well-defined value-based equals/hashCode implementations. If an implementation does not strictly conform to these requirements, behavior of the OpenTelemetry APIs and default SDK cannot be guaranteed.
+For this reason, it is strongly suggested that you use the implementation that is provided here via the factory methods and the AttributesBuilder.
+
+
+```clojure
+(def map-a {:foo "bar"})
+(def map-b {:foo "bar"})
+
+(= (.hashCode map-a) (.hashCode map-b))
+;; => true
+
+(= map-a map-b)
+;; => true
+
+(.equals map-a map-b)
+;; => true
+```
+TODO: validate with https://clojure.org/guides/equality
+
 ### Concurrency primitives
 
 #### future
@@ -124,13 +155,26 @@ We have to differentiate 2 use cases:
   - implement all SpanBuilder interface:
     - Events
     - Links https://javadoc.io/static/io.opentelemetry/opentelemetry-api/1.7.0/io/opentelemetry/api/trace/SpanBuilder.html
+    - 
     - Attributes
+      - spec: https://github.com/open-telemetry/opentelemetry-specification/blob/071d3c853b1ec4f5f535d1021a077273ce8354ce/specification/common/common.md#L18 
       - see how to build a simple version that leverage reflection, and another additional version that is more performant and will create less churn, since it will be in the hot path 
       - idea: custom clojure implementation that implements the protocol ?
+        - Seems possible: "Implementations of this interface *must* be immutable and have well-defined value-based equals/hashCode implementations. If an implementation does not strictly conform to these requirements, behavior of the OpenTelemetry APIs and default SDK cannot be guaranteed."
+        - But probably not, because it would break autoinstrumentation: https://github.com/open-telemetry/opentelemetry-java/blob/main/api/all/src/main/java/io/opentelemetry/api/internal/InternalAttributeKeyImpl.java#L39
+        - it may be possible to only reify Attributes interface and provide the single `AttributesBuilder/putAll` API to avoid the churn and reflection cost
+        - in the end, default implementation store them in ArrayBackedAttributes as Objects
+        - attribute key "type" field (type of attribute's value) seems only needed for key comparison in InternalAttributeKeyImpl
+      
       - javadoc -> It is strongly recommended to use setAttribute(AttributeKey, Object), and pre-allocate your keys, if possible.
+        - if we use Clojure strings, that's fine
       - best practices: https://opentelemetry.lightstep.com/best-practices/using-attributes/
+  
   - ~~implement printable protocols for span, attributes, bagage~~
     - instead see https://clojure.github.io/clojure/clojure.datafy-api.html
+  - Resources:
+    - if service.name not set, "unknown_service:java"
+    - MANDATORY = create(Attributes.of(ResourceAttributes.SERVICE_NAME, "unknown_service:java"));
   - Namespace with Stuart Sierra's component of the tracer
     - see graceful shutdown https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#shutdown
   - Review naming conventions
@@ -161,6 +205,7 @@ We have to differentiate 2 use cases:
     ~~- why `Context.wrap` doesn't close the `Scope` ?~~ 
     - get a Yourkit licence for open source project: https://www.yourkit.com/java/profiler/purchase/#os_license
     - warn on reflection
+      - https://clojure.org/reference/java_interop#optimization
     - for some functions, if I provide an easy-to-use but with reflection, then I must also provide a more Java-ish version but without reflection (when perf is required) -> Span attributes
     ~~- with-bindings vs binding -> perf difference ? TODO: check with criterium~~
     - profile the code and try in https://github.com/bsless/stress-server project maybe, to have a good stress test ?
@@ -171,7 +216,10 @@ We have to differentiate 2 use cases:
     - could be interesting to check https://github.com/jetty-project/jetty-load-generator
     - would be interesting to have an example implementation e2e with dummy db backends and being able to load test it, to identity churn etc
     - see https://github.com/bsless/stress-server
-    - might not be useful at all, but it can be interesting to use [no.disassemble](https://tech.redplanetlabs.com/2020/09/02/clojure-faster/#dramatic-gains-with-type-hinting) 
+    - might not be useful at all, but it can be interesting to use [no.disassemble](https://tech.redplanetlabs.com/2020/09/02/clojure-faster/#dramatic-gains-with-type-hinting)
+    - Load testing:
+      - configure reitit properly (see stress server results)
+      - use BatchSpanProcessor !
   - clj linter ? https://github.com/clj-kondo/clj-kondo
   - Implement Bagage ~= attributes shared by spans
     - idea: implement custom version where all immutability things are removed since we are in clojure land already
