@@ -2,7 +2,6 @@
   (:import (io.opentelemetry.api.common Attributes AttributeKey)
            (clojure.lang Keyword)))
 
-
 (set! *warn-on-reflection* true)
 ;; Decisions:
 ;; - it looks ok to allow mixed keys and let the end user manage them
@@ -19,7 +18,7 @@
 
 (defn key->String [key]
   (if (keyword? key)
-    ^String (-> ^Keyword key .-sym .getName)                         ;; Keyword -> Symbol -> name
+    ^String (-> ^Keyword key .-sym .getName)                ;; Keyword -> Symbol -> name
     ^String (str key)))
 
 (defn build-map [attr-map]
@@ -27,7 +26,7 @@
     (doseq [a attr-map]
       (.put
         builder
-        (key->String (nth a 0))
+        ^String (key->String (nth a 0))
         (nth a 1)))
     (.build builder)))
 
@@ -50,19 +49,17 @@
     (.build builder)))
 
 (defn key->StringOrAttribute [key]
-  (if (= AttributeKey (class key))
-    ^AttributeKey key
-    (if (keyword? key)
-      ^String (-> ^Keyword key .-sym .getName)                       ;; Keyword -> Symbol -> name
-      ^String (str key))))
+  (if (keyword? key)
+    ^String (-> ^Keyword key .-sym .getName)                ;; Keyword -> Symbol -> name
+    ^String (str key)))
 
 (defn build-map-with-mixed-keys [attr-map]
   (let [builder (Attributes/builder)]
     (doseq [a attr-map]
-      (.put
-        builder
-        (nth a 0)
-        (nth a 1)))
+      (let [k (nth a 0)]
+        (if (instance? AttributeKey k)
+          (.put builder ^AttributeKey k (nth a 1))
+          (.put builder ^String (key->StringOrAttribute k) (nth a 1)))))
     (.build builder)))
 
 ;;stringArrayKey (into-array String ["as" "as"])
@@ -70,19 +67,15 @@
 ;longArrayKey long-array
 ;doubleArrayKey double-array
 
-;; if correctly typed value, then we can use clojure runtime dispatch
-
 ;- AttributeKey:
 ;  - key value must be a keyword or string
-;  - value must be typed
-;  - type of value:
-;    - best: hinted upfront
-;
+;  - value must be typed if untyped key
+;  - value MAY (TODO: validate) not be typed if typed key
 
 
 (comment
   ;; Try different implementations to evaluate choices we have
-  (use 'criterium.core
+  (use 'criterium.core)
 
   ;; Conclusions:
   ;- with string keys 115µs +/- 8
@@ -91,30 +84,31 @@
   ;- with known type keys 3µs +/- 50 (it does call .put AttributeKey<V>, v instead of reflecting on other put implements)
   ;- with know type keys memoized 3µs +/- 600ns
   ;  ->> with such elevated std deviation ?
-  ;- with mixed types: AttributeKey / String : 113 +/- 9
+  ;- with mixed types: AttributeKey / String : 123 +/- 9
   ;  >> OK
 
 
-    (bench
-      (build-map {"foo"  "bar"
-                  "foo2" (long 121321231)
-                  "foo3" false
-                  "foo4" (double 309240293490)
-                  "foo5" (string-array ["123123" "adasdasdasdasdasd" "1231@#123"])
-                  "foo6" (boolean-array [false true true])
-                  "foo7" (long-array [1 192 10212 221])
-                  "foo8" (double-array [10921290 121212])})))
-  ; Evaluation count : 558600 in 60 samples of 9310 calls.
-  ;             Execution time mean : 115.286526 µs
-  ;    Execution time std-deviation : 8.073000 µs
-  ;   Execution time lower quantile : 107.477120 µs ( 2.5%)
-  ;   Execution time upper quantile : 131.772092 µs (97.5%)
-  ;                   Overhead used : 7.631417 ns
+  (bench
+    (build-map {"foo"  "bar"
+                "foo2" (long 121321231)
+                "foo3" false
+                "foo4" (double 309240293490)
+                "foo5" (string-array ["123123" "adasdasdasdasdasd" "1231@#123"])
+                "foo6" (boolean-array [false true true])
+                "foo7" (long-array [1 192 10212 221])
+                "foo8" (double-array [10921290 121212])}))
+  ; Evaluation count : 708060 in 60 samples of 11801 calls.
+  ;             Execution time mean : 84.057787 µs
+  ;    Execution time std-deviation : 1.353403 µs
+  ;   Execution time lower quantile : 82.942015 µs ( 2.5%)
+  ;   Execution time upper quantile : 88.223526 µs (97.5%)
+  ;                   Overhead used : 7.835663 ns
   ;
-  ;Found 2 outliers in 60 samples (3.3333 %)
-  ;	low-severe	 1 (1.6667 %)
-  ;	low-mild	 1 (1.6667 %)
-  ; Variance from outliers : 53.3935 % Variance is severely inflated by outliers
+  ;Found 8 outliers in 60 samples (13.3333 %)
+  ;	low-severe	 4 (6.6667 %)
+  ;	low-mild	 4 (6.6667 %)
+  ; Variance from outliers : 1.6389 % Variance is slightly inflated by outliers
+
 
   ;; with only string key values instead of calling key->String
   (bench
@@ -148,17 +142,17 @@
                 :foo6 (boolean-array [false true true])
                 :foo7 (long-array [1 192 10212 221])
                 :foo8 (double-array [10921290 121212])}))
-  ;; Evaluation count : 480660 in 60 samples of 8011 calls.
-  ;             Execution time mean : 142.994655 µs
-  ;    Execution time std-deviation : 21.860114 µs
-  ;   Execution time lower quantile : 124.309660 µs ( 2.5%)
-  ;   Execution time upper quantile : 207.995118 µs (97.5%)
-  ;                   Overhead used : 7.631417 ns
+  ;; Evaluation count : 704520 in 60 samples of 11742 calls.
+  ;             Execution time mean : 98.930515 µs
+  ;    Execution time std-deviation : 36.660813 µs
+  ;   Execution time lower quantile : 83.886252 µs ( 2.5%)
+  ;   Execution time upper quantile : 223.599390 µs (97.5%)
+  ;                   Overhead used : 7.835663 ns
   ;
-  ;Found 4 outliers in 60 samples (6.6667 %)
+  ;Found 6 outliers in 60 samples (10.0000 %)
   ;	low-severe	 2 (3.3333 %)
-  ;	low-mild	 2 (3.3333 %)
-  ; Variance from outliers : 84.1949 % Variance is severely inflated by outliers
+  ;	low-mild	 4 (6.6667 %)
+  ; Variance from outliers : 98.1500 % Variance is severely inflated by outliers
 
   ;; with known type key:
   (bench
@@ -219,26 +213,24 @@
   ;; with mixed keys, like "foo", or :foo, or (AttributeKey/stringKey "foo")
   (bench
     (build-map-with-mixed-keys
-      {(AttributeKey/stringKey "foo") "bar"
-       "foo2"                         (long 121321231)
-       "foo3"                         false
-       "foo4"                         (double 309240293490)
+      {(AttributeKey/stringKey "foo")       "bar"
+       "foo2"                               (long 121321231)
+       "foo3"                               false
+       "foo4"                               (double 309240293490)
        (AttributeKey/stringArrayKey "foo5") (string-array ["123123" "adasdasdasdasdasd" "1231@#123"])
-       "foo6" (boolean-array [false true true])
-       (AttributeKey/longArrayKey "foo7") (long-array [1 192 10212 221])
+       "foo6"                               (boolean-array [false true true])
+       (AttributeKey/longArrayKey "foo7")   (long-array [1 192 10212 221])
        (AttributeKey/doubleArrayKey "foo8") (double-array [10921290 121212])}))
-  ;; Evaluation count : 546540 in 60 samples of 9109 calls.
-  ;             Execution time mean : 113.703024 µs
-  ;    Execution time std-deviation : 9.164403 µs
-  ;   Execution time lower quantile : 109.856933 µs ( 2.5%)
-  ;   Execution time upper quantile : 128.566522 µs (97.5%)
+  ;; Evaluation count : 531360 in 60 samples of 8856 calls.
+  ;             Execution time mean : 123.473243 µs
+  ;    Execution time std-deviation : 7.985436 µs
+  ;   Execution time lower quantile : 115.005491 µs ( 2.5%)
+  ;   Execution time upper quantile : 139.622943 µs (97.5%)
   ;                   Overhead used : 7.631417 ns
   ;
-  ;Found 7 outliers in 60 samples (11.6667 %)
-  ;	low-severe	 4 (6.6667 %)
-  ;	low-mild	 3 (5.0000 %)
-  ; Variance from outliers : 60.1422 % Variance is severely inflated by outliers
-
+  ;Found 2 outliers in 60 samples (3.3333 %)
+  ;	low-severe	 2 (3.3333 %)
+  ; Variance from outliers : 48.4435 % Variance is moderately inflated by outliers
 
 
 
@@ -265,6 +257,79 @@
   ;	low-severe	 4 (6.6667 %)
   ;	low-mild	 3 (5.0000 %)
   ; Variance from outliers : 51.7443 % Variance is severely inflated by outliers
+
+
+  ;; with mixed keys, containing only preallocated attributekeys
+  (bench
+    (build-map-with-mixed-keys
+      {(AttributeKey/stringKey "foo")        "bar"
+       (AttributeKey/longKey "foo2")         (long 121321231)
+       (AttributeKey/booleanKey "foo3")      false
+       (AttributeKey/doubleKey "foo4")       (double 309240293490)
+       (AttributeKey/stringArrayKey "foo5")  (string-array ["123123" "adasdasdasdasdasd" "1231@#123"])
+       (AttributeKey/booleanArrayKey "foo6") (boolean-array [false true true])
+       (AttributeKey/longArrayKey "foo7")    (long-array [1 192 10212 221])
+       (AttributeKey/doubleArrayKey "foo8")  (double-array [10921290 121212])}))
+  ;; Evaluation count : 20049240 in 60 samples of 334154 calls.
+  ;             Execution time mean : 3.012571 µs
+  ;    Execution time std-deviation : 40.288298 ns
+  ;   Execution time lower quantile : 2.975127 µs ( 2.5%)
+  ;   Execution time upper quantile : 3.124335 µs (97.5%)
+  ;                   Overhead used : 7.835663 ns
+  ;
+  ;Found 3 outliers in 60 samples (5.0000 %)
+  ;	low-severe	 2 (3.3333 %)
+  ;	low-mild	 1 (1.6667 %)
+  ; Variance from outliers : 1.6389 % Variance is slightly inflated by outliers
+
+  ;; with mixed keys, containing only string keys
+  (bench
+    (build-map-with-mixed-keys
+      {"foo"  "bar"
+       "foo2" (long 121321231)
+       "foo3" false
+       "foo4" (double 309240293490)
+       "foo5" (string-array ["123123" "adasdasdasdasdasd" "1231@#123"])
+       "foo6" (boolean-array [false true true])
+       "foo7" (long-array [1 192 10212 221])
+       "foo8" (double-array [10921290 121212])}))
+  ;; Evaluation count : 709860 in 60 samples of 11831 calls.
+  ;             Execution time mean : 85.325562 µs
+  ;    Execution time std-deviation : 2.497573 µs
+  ;   Execution time lower quantile : 82.792843 µs ( 2.5%)
+  ;   Execution time upper quantile : 90.195614 µs (97.5%)
+  ;                   Overhead used : 7.835663 ns
+  ;
+  ;Found 2 outliers in 60 samples (3.3333 %)
+  ;	low-severe	 1 (1.6667 %)
+  ;	low-mild	 1 (1.6667 %)
+  ; Variance from outliers : 15.8224 % Variance is moderately inflated by outliers
+
+  ;; with mixed keys, containing only keyword keys
+  ;; NB: quite strange the std deviation is way lower than on the simple case.
+  (bench
+    (build-map-with-mixed-keys
+      {:foo  "bar"
+       :foo2 (long 121321231)
+       :foo3 false
+       :foo4 (double 309240293490)
+       :foo5 (string-array ["123123" "adasdasdasdasdasd" "1231@#123"])
+       :foo6 (boolean-array [false true true])
+       :foo7 (long-array [1 192 10212 221])
+       :foo8 (double-array [10921290 121212])}))
+  ;; Evaluation count : 706080 in 60 samples of 11768 calls.
+  ;             Execution time mean : 91.719398 µs
+  ;    Execution time std-deviation : 7.932897 µs
+  ;   Execution time lower quantile : 84.708368 µs ( 2.5%)
+  ;   Execution time upper quantile : 105.703931 µs (97.5%)
+  ;                   Overhead used : 7.835663 ns
+  ;
+  ;Found 3 outliers in 60 samples (5.0000 %)
+  ;	low-severe	 1 (1.6667 %)
+  ;	low-mild	 2 (3.3333 %)
+  ; Variance from outliers : 63.5292 % Variance is severely inflated by outliers
+
+
 
 
   :ok)
