@@ -1,24 +1,20 @@
 (ns opentelemetry-clj.trace.span
-  (:import (io.opentelemetry.api.trace SpanBuilder SpanContext SpanKind Tracer Span)
+  (:require [opentelemetry-clj.attribute :as attribute])
+  (:import (io.opentelemetry.api.trace SpanBuilder SpanContext SpanKind Tracer Span StatusCode)
            (io.opentelemetry.context Context)
            (io.opentelemetry.api.common Attributes AttributeKey)
            (java.util.concurrent TimeUnit)
            (java.time Instant)))
 
-
 (set! *warn-on-reflection* true)
 
-;; TODO: naming, decide on how to name the builder functions which have a side effect (mutate span builder state)w
+;; Span Builder interface
 
-(defn new-builder [^Tracer tracer span-name]
-  (.spanBuilder tracer span-name))
+(defn new-builder [tracer span-name]
+  (.spanBuilder ^Tracer tracer ^Span span-name))
 
 (defn ^Span start [^SpanBuilder span-builder]
   (.startSpan span-builder))
-
-(defn end
-  ([^Span span] (.end span))
-  ([^Span span ^long ts ^TimeUnit unit] (.end span ts unit))) ;
 
 (defn set-parent
   "Sets the parent to use from the specified Context. If not set, the value of Span.current() at startSpan() time will be used as parent.\n\nIf no Span is available in the specified Context, the resulting Span will become a root instance, as if setNoParent() had been called. "
@@ -30,6 +26,8 @@
   [^SpanBuilder span-builder]
   (.setNoParent span-builder))
 
+;; SpanContext: https://javadoc.io/doc/io.opentelemetry/opentelemetry-api/latest/io/opentelemetry/api/trace/SpanContext.html
+;; I don't understand if there is a case where we would be manually building one, I don't think so.
 (defn add-link
   "Adds a link to the newly created Span.\n\nLinks are used to link Spans in different traces. Used (for example) in batching operations, where a single batch handler processes multiple requests from different traces or the same trace. "
   ([^SpanBuilder span-builder ^SpanContext span-context]
@@ -61,23 +59,17 @@
   ([^SpanBuilder span-builder ^long ts ^TimeUnit unit] (.setStartTimestamp span-builder ts unit)))
 
 (defn set-all-attributes
-  ""
-  [^SpanBuilder span-builder attributes]
-  (doseq [a attributes]
-    (.setAttribute span-builder ^AttributeKey (nth a 0) (nth a 1))))
+  [span-builder attributes]
+  (.setAllAttributes ^SpanBuilder span-builder
+    (attribute/build attributes)))
 
-(comment
-  (def attributes {:valll "asd"
-                   :sync 1}))
-
-
-
-;; Idea: option in map to validate options are consistent ?
+;; Idea: option in map to validate options are consistent ? could be used during test
 (defn ^SpanBuilder build
-  "Required: :name"
+  "Required: :name
+  Doesn't start the span, see fn start
+  "
   [^Tracer tracer opts]
-  (let [builder (.spanBuilder tracer (:name opts))]
-    (println "opts" opts)
+  (let [builder (new-builder tracer (:name opts))]
     (doseq [opt opts]                                       ;; no need to dissoc :name and build another map, we can simply ignore it in the case statement
       (let [key   (nth opt 0)
             value (nth opt 1)]
@@ -91,7 +83,61 @@
                       (set-start-timestamp builder value)
                       (apply set-start-timestamp builder (:ts value) (:unit value)))
           :attributes (set-all-attributes builder value)
-          :ignored-key)))
+          :ignored-key)))                                   ;; TODO: if given ignored key, emit a log warn once ?
     builder))
 
+;; Span interface
 
+(defn end
+  ([^Span span] (.end span))
+  ([^Span span instant] (.end ^Span span ^Instant instant))
+  ([^Span span ^long ts ^TimeUnit unit] (.end span ts unit))) ;
+
+(defn span-set-attribute [])
+(defn span-set-all-attributes [])
+
+
+(defn add-event
+  ([span event-name] (.addEvent ^Span span ^String event-name))
+  ([span event-name instant] (.addEvent ^Span span ^String event-name ^Instant instant))
+  ([span event-name ts unit] (.addEvent ^Span span ^String event-name ^long ts ^TimeUnit unit)))
+
+(defn add-event-with-attributes
+  ([span event-name attributes] (.addEvent ^Span span ^String event-name ^Attributes attributes))
+  ([span event-name attributes instant] (.addEvent ^Span span ^String event-name ^Attributes attributes ^Instant instant))
+  ([span event-name attributes ts unit] (.addEvent ^Span span ^String event-name ^Attributes attributes ^long ts ^TimeUnit unit)))
+
+(def status-unset :unset)
+(def status-ok :ok)
+(def status-error :error)
+(def statuses-mapping
+  {status-unset StatusCode/UNSET
+   status-ok    StatusCode/OK
+   status-error StatusCode/ERROR})
+
+(defn set-status
+  ([span status-code]
+   (let [s (status-code statuses-mapping)]
+     (if s
+       (.setStatus ^Span span ^StatusCode s))))
+  ([span status-code description]
+   (let [s (status-code statuses-mapping)]
+     (if s
+       (.setStatus ^Span span ^StatusCode s ^String description)))))
+;;TODO: warn once wrong status code ?)))
+
+;
+(defn record-exception
+  ([span exception] (.recordException ^Span span ^Throwable exception))
+  ([span exception attributes] (.recordException ^Span span ^Throwable exception ^Attributes (attribute/build attributes))))
+
+(defn update-name [span new-name]
+  (.updateName ^Span span ^String new-name))
+
+(defn get-context [span]
+  (.getContext ^Span span))
+
+(defn recording? [span]
+  (.isRecording ^Span span))
+
+;; storeInContext

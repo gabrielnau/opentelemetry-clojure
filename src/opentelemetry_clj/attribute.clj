@@ -2,8 +2,6 @@
   (:import (io.opentelemetry.api.common Attributes AttributeKey)
            (clojure.lang Keyword)))
 
-(set! *warn-on-reflection* true)
-
 (defn string-array
   "Helper to build a Java string array"
   [items]
@@ -14,11 +12,14 @@
     ^String (-> ^Keyword key .-sym .getName)                ;; Keyword -> Symbol -> name
     ^String (str key)))
 
+
+;(set! *warn-on-reflection* true)
+
 ;; Notes for next batch of microbenchmark:
 ;; - with clojure spec generator, generate once a more complex and rich state
 ;; - see if there is anything better than doseq and nth
 ;; - see if inlining key->StringOrAttribute make any sense
-(defn build
+(defn ^Attributes build
   "TODO: list cases:
 
   - key: AttributeKey<V> instance | string | keyword

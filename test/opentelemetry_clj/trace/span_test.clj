@@ -1,11 +1,9 @@
-(ns opentelemetry-clj.span-test
+(ns opentelemetry-clj.trace.span-test
   (:require [clojure.test :refer :all]
             [clojure.datafy :refer [datafy]]
             [opentelemetry-clj.trace.span :as subject]
             [opentelemetry-clj.test-utils :as utils]
-            [clojure.string :as str])
-  (:import (io.opentelemetry.sdk.trace SdkTracer)
-           (io.opentelemetry.api.trace Span)))
+            [clojure.string :as str]))
 
 ;; fixture reset
 

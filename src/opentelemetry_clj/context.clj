@@ -30,8 +30,6 @@
   "that's actually the Agent send-off executor
   Context/current will be correct inside a future body
   TODO: example code
-
-
   "
   []
   ;; clojure.lang.Agent/soloExecutor
@@ -55,7 +53,6 @@
 
 ;; create span from implicit parent
 ;; create span from explicit parent
-
 
 (defn current []
   (Context/current))
