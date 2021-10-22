@@ -1,4 +1,8 @@
 (ns opentelemetry-clj.core
+  ;; Don't require the following namespaces or it will break users who don't have the opentelemetry-sdk on the classpath
+  ;; (i.e. lib authors)
+  ;; - opentelemetry-clj.sdk.*
+  ;; - opentelemetry-clj.datafy
   (:require [opentelemetry-clj.trace.span]
             [opentelemetry-clj.context]
             [opentelemetry-clj.attribute])

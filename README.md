@@ -33,6 +33,28 @@ bin/kaocha
 
 ## Documentation (WIP, unstructured)
 
+### Get a tracer instance
+
+First, you need an instance of OpenTelemetrySdk:
+
+- get GlobalOpenTelemetry or DefaultOpenTelemetry
+- if you want to configure:
+  - either include autoconfigure artifact
+    - link to spec of autoconfiguration
+    - and then GlobalOpenTelemetry/get ...
+  - either build manually the 'OpenTelemetrySdk' instance:
+    - just build -> then keep the value floating
+    - if you register global, then `core/tracer`
+      - shall we memoize tracer instance or not ?
+
+TODO: flowchart to explain the decisions ? could be way simpler than words (agent vs no agent, auto instrumentation vs no autoinstrumentation, clj library author) 
+
+- About don't run twice instanciation: https://github.com/open-telemetry/opentelemetry-java/issues/3717
+- https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#forceflush-1
+- > Note that there is no need to "set" a tracer by name before getting it. The getTracer method always returns a handle to the same tracing client. The name you provide is to help identify which component generated which spans, and to potentially disable tracing for individual components.
+  We recommend calling getTracer once per component during initialization and retaining a handle to the tracer, rather than calling getTracer repeatedly.
+  This should be configured as early as possible in the entry point of your application. Keep in mind, this builder is not required if the agent is in use.
+
 ### Thread safety
 
 - say these APIs are thread safe: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/api.md#concurrency
@@ -69,13 +91,6 @@ When using Agent, you get the following constraints / caveats:
 How to leverage [supported libraries, frameworks etc](https://github.com/open-telemetry/opentelemetry-java-instrumentation/blob/main/docs/supported-libraries.md) without running the agent ?
 - example: https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/instrumentation/okhttp/okhttp-3.0/library
 
-### How to get a Tracer
-
-- > Note that there is no need to "set" a tracer by name before getting it. The getTracer method always returns a handle to the same tracing client. The name you provide is to help identify which component generated which spans, and to potentially disable tracing for individual components.
-  We recommend calling getTracer once per component during initialization and retaining a handle to the tracer, rather than calling getTracer repeatedly.
-  This should be configured as early as possible in the entry point of your application. Keep in mind, this builder is not required if the agent is in use.
-- explain when using agent or not
-
 ### Understand which ContextStorage provider is used
 
 java agent: 
@@ -84,34 +99,33 @@ java agent:
 
 ### Attributes
 
+OTEL documentation:
 - best practices: https://opentelemetry.lightstep.com/best-practices/using-attributes/
 - Recommendations for app devs: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/attribute-naming.md#recommendations-for-application-developers
 - Naming: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/attribute-naming.md
+- Spec: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/common.md#attributes
 
-Spec: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/common.md#attributes
+- They can be attached to a Resource, Span, span Event, span Exception,  
 
-An immutable container for attributes. -> looks like a clojure map
-The keys are AttributeKeys and the values are Object instances that match the type of the provided key.
-Null keys will be silently dropped. -> possible
-Note: The behavior of null-valued attributes is undefined, and hence strongly discouraged.
-Implementations of this interface *must* be immutable and have well-defined value-based equals/hashCode implementations. If an implementation does not strictly conform to these requirements, behavior of the OpenTelemetry APIs and default SDK cannot be guaranteed.
-For this reason, it is strongly suggested that you use the implementation that is provided here via the factory methods and the AttributesBuilder.
+Implementation choice:
+- Because of the Java class we have to implement, we have to declare the attribute's value type
+- I evaluated the path of implementing in Clojure the interface, but I don't see the point since downstream (in exporters) we HAVE TO provide the `.getType` method which either will required either reflection or manual hint
+- Valid types are: string, boolean, long, double, string array, boolean array, long array, double array
+- I tested several hypothesis here that led to the first implementation: https://github.com/gabrielnau/opentelemetry-clojure/blob/722263bdea07bcce0e4ce3e46e97e7a5a574f4e2/src/opentelemetry_clj/attribute.clj
+- TODO: refine the benchmark with a spec generator to see the use case where we hit [attributes limits](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/common.md#attribute-limits)  
 
+### Resource
 
-```clojure
-(def map-a {:foo "bar"})
-(def map-b {:foo "bar"})
+- https://github.com/open-telemetry/opentelemetry-java/blob/main/sdk/common/src/main/java/io/opentelemetry/sdk/resources/Resource.java
+  - if service.name not set, "unknown_service:java"
+  - doc and advise: https://opentelemetry.lightstep.com/go/tracing/
+  - spec: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/resource/sdk.md#detecting-resource-information-from-the-environment
 
-(= (.hashCode map-a) (.hashCode map-b))
-;; => true
+### Datafy 
 
-(= map-a map-b)
-;; => true
-
-(.equals map-a map-b)
-;; => true
-```
-TODO: validate with https://clojure.org/guides/equality
+- see `opentelemetry.datafy`
+- needs to be required if you want to use it
+- rely on opentelemetry-sdk as well, some API facades don't allow to introspect data
 
 ### Concurrency primitives
 
@@ -140,45 +154,20 @@ We have to differentiate 2 use cases:
 5. Load test example app with correctness validation (convey trace id in the request body to assert down the execution path correct spans) + Profiling, etc 
 
 ## TODO :
-
-- Tracing:
-  - implement Tracer interface
-    - possible to use Component but why ? we don't do that for logging or metrics usually, that's a global singleton
-    - can't make SDK dependency "provided"
-    - option 1: include auto instrumentation artifact and use global singleton https://www.javadoc.io/static/io.opentelemetry/opentelemetry-api/1.0.1/io/opentelemetry/api/GlobalOpenTelemetry.html
-    - option 2: manually build it with OpenTelemetrySdk.builder (in SDK then, not API).
-    - About don't run twice instanciation: https://github.com/open-telemetry/opentelemetry-java/issues/3717 >> GlobalOpenTelemetry vs javaagent ?
-    - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#forceflush-1
+ 
+- Kaocha: -Dclojure.compile.warn-on-reflection=true ?
+- Tracing: 
+  - Implement Bagage ~= attributes shared by spans
+    - idea: implement custom version where all immutability things are removed since we are in clojure land already
+    - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/overview.md#baggage-signal
+    - https://docs.honeycomb.io/getting-data-in/java/opentelemetry-distro/#multi-span-attributes
+    - BaggageSpanProcessor: ?
   - Leverage manual instrumented libraries without the agent:
     - example: https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/instrumentation/okhttp/okhttp-3.0/library
     - it could be a good solution to avoid the agent pitfalls while leveraging instrumented libs like jetty, jdbc etc
-  - implement all SpanBuilder interface:
-    - Events
-    - Links https://javadoc.io/static/io.opentelemetry/opentelemetry-api/1.7.0/io/opentelemetry/api/trace/SpanBuilder.html
-    - 
-    - Attributes
-      - spec: https://github.com/open-telemetry/opentelemetry-specification/blob/071d3c853b1ec4f5f535d1021a077273ce8354ce/specification/common/common.md#L18 
-      - see how to build a simple version that leverage reflection, and another additional version that is more performant and will create less churn, since it will be in the hot path 
-      - idea: custom clojure implementation that implements the protocol ?
-        - Seems possible: "Implementations of this interface *must* be immutable and have well-defined value-based equals/hashCode implementations. If an implementation does not strictly conform to these requirements, behavior of the OpenTelemetry APIs and default SDK cannot be guaranteed."
-        - But probably not, because it would break autoinstrumentation: https://github.com/open-telemetry/opentelemetry-java/blob/main/api/all/src/main/java/io/opentelemetry/api/internal/InternalAttributeKeyImpl.java#L39
-        - it may be possible to only reify Attributes interface and provide the single `AttributesBuilder/putAll` API to avoid the churn and reflection cost
-        - in the end, default implementation store them in ArrayBackedAttributes as Objects
-        - attribute key "type" field (type of attribute's value) seems only needed for key comparison in InternalAttributeKeyImpl
-      
-      - javadoc -> It is strongly recommended to use setAttribute(AttributeKey, Object), and pre-allocate your keys, if possible.
-        - if we use Clojure strings, that's fine
-      - best practices: https://opentelemetry.lightstep.com/best-practices/using-attributes/
-  
-  - ~~implement printable protocols for span, attributes, bagage~~
-    - instead see https://clojure.github.io/clojure/clojure.datafy-api.html
-  - Resources:
-    - if service.name not set, "unknown_service:java"
-    - MANDATORY = create(Attributes.of(ResourceAttributes.SERVICE_NAME, "unknown_service:java"));
-  - Namespace with Stuart Sierra's component of the tracer
-    - see graceful shutdown https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#shutdown
   - Review naming conventions
     - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/resource/semantic_conventions/README.md
+    - decide on how to name the builder functions which have a side effect (mutate span builder state)w
   - Logger configuration
     - https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/instrumentation/logback-1.0/library
     - https://opentelemetry.io/docs/java/manual_instrumentation/#logging-and-error-handling
@@ -198,6 +187,9 @@ We have to differentiate 2 use cases:
     environments, and you may consider enabling it in production if you have the CPU budget or have
     very strict requirements on context being propagated correctly (i.e., because you use context in
     a multi-tenant system)."
+    - use clojure.spec to generate fake data to test span builder, everything in global sdk setup
+    - property based testing for e2e tests
+      - see https://clojure.org/guides/test_check_beginner
     - integration testing
       - validate with a javaagent, for example: Netty (autoinstrumented) -> Aleph (manual) -> App code (manual) -> JDBC (auto)
       - https://github.com/BrunoBonacci/mulog/issues/52
@@ -221,13 +213,11 @@ We have to differentiate 2 use cases:
       - configure reitit properly (see stress server results)
       - use BatchSpanProcessor !
   - clj linter ? https://github.com/clj-kondo/clj-kondo
-  - Implement Bagage ~= attributes shared by spans
-    - idea: implement custom version where all immutability things are removed since we are in clojure land already
-    - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/overview.md#baggage-signal
-    - https://docs.honeycomb.io/getting-data-in/java/opentelemetry-distro/#multi-span-attributes
-    - BaggageSpanProcessor: ?
+  
   - Attributes limits: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/common.md#attribute-limits
     - explore this API and how it behaves
+  - opentelemetry-clj.attribute: implement an attribute key "store" to easily allow end users to preallocate them
+     - attribute key preallocation with weak map support, see keywords implementation: https://github.com/clojure/clojure/blob/clojure-1.10.1/src/jvm/clojure/lang/Keyword.java#L32
   - Documentation
     - cljdoc https://github.com/cljdoc/cljdoc/blob/master/doc/userguide/for-library-authors.adoc
     - Docs: https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/docs
@@ -241,6 +231,16 @@ We have to differentiate 2 use cases:
       - Note about: span per retry in http query https://neskazu.medium.com/thoughts-on-http-instrumentation-with-opentelemetry-9fc22fa35bc7 + So for the sake of consistency and to give users better observability, I believe each redirect should be a separate HTTP span.
       - middleware will be in hot path, really needs to be as performant as possible
     - auto configuration https://github.com/open-telemetry/opentelemetry-java/tree/main/sdk-extensions/autoconfigure
+    - supported underlying lib
+    - document each version requiring which Sdk
+    - code 2 gif is needed to explain context propagation: https://github.com/phronmophobic/clj-media
+    - "context object follows execution path of your code"
+  - review library guidelines https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/library-guidelines.md
+  - see if that makes sense to provide a namespace for Component version with clean shutdown, same for integrant
+    -> could be a separate lib then
+    - see graceful shutdown https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#shutdown
+  - Review all TODO
+  - page 454 clojure cookbook: verifiying java interop with core.typed ? can it bring anything else than the warn on reflection ?
 - Metrics
   - start to explore the Java doc, even if its still alpha
   - conventions: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/metrics/semantic_conventions/README.md
@@ -250,15 +250,11 @@ We have to differentiate 2 use cases:
   - check for build, CI for open source
   - how to publish to clojars
   - how to publish to maven central
+  - https://keepachangelog.com/en/1.0.0/
   - see clojurians announcements and tracing channels to gather feedback + https://clojureverse.org/c/showcase/your-projects-and-libraries/35
-- Bookmars:
+  - versionning: clojuresque but see if we incr 0.X.0 each time we bump sdk dependency in order to allow for patches for older versions ? 
+- Bookmarks:
   - Programmatic injection of agent https://cloud-native.slack.com/archives/C0150QF88FL/p1632249888088300?thread_ts=1631980158.059400&cid=C0150QF88FL
-
-To ask on Clojurians:
-- is it risky to wrap the core.async executor ?
-
+  
 To ask on CNCF Slack:
-- Span implementation when using autoinstrumentation java agent differs from the one from the SDK
-  - ask why in a github issue
-  - (with-open [_ (-> (Context/current) (.with span) .makeCurrent)] versus makeCurrent in docs
-- is it true to say, we want to maintain a valid `Context.current()` accross the entire code execution path ?
+- what is the logic of attribute key type in comparison

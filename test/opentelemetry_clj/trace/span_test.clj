@@ -1,6 +1,7 @@
 (ns opentelemetry-clj.trace.span-test
   (:require [clojure.test :refer :all]
             [clojure.datafy :refer [datafy]]
+            [opentelemetry-clj.datafy] ;; required
             [opentelemetry-clj.trace.span :as subject]
             [opentelemetry-clj.test-utils :as utils]
             [clojure.string :as str]))
