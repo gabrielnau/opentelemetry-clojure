@@ -6,7 +6,9 @@
   (:require [opentelemetry-clj.trace.span]
             [opentelemetry-clj.context]
             [opentelemetry-clj.attribute])
-  (:import (io.opentelemetry.api GlobalOpenTelemetry)))
+  (:import (io.opentelemetry.api GlobalOpenTelemetry)
+           (io.opentelemetry.api.baggage Baggage)
+           (io.opentelemetry.context Context)))
 
 ;; requirements:
 ;; - concise API for general use cases
@@ -23,6 +25,15 @@
    (GlobalOpenTelemetry/getTracer ^String instrumentation-name))
   ([instrumentation-name instrumentation-version]
    (GlobalOpenTelemetry/getTracer ^String instrumentation-name ^String instrumentation-version)))
+
+(defn baggage-from-implicit-context []
+  (Baggage/current))
+
+(defn baggage-from-explicit-context [context]
+  (Baggage/fromContext ^Context context))
+
+(defn ^Context store-baggage-in-context [baggage context]
+  (.storeInContext ^Baggage baggage ^Context context))
 
 (comment
   ;; Ideas of context conveyance API + span creation
