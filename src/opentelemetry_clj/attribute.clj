@@ -1,6 +1,9 @@
 (ns opentelemetry-clj.attribute
-  (:import (io.opentelemetry.api.common Attributes AttributeKey)))
+  (:import (io.opentelemetry.api.common Attributes AttributeKey)
+           (clojure.lang Keyword)))
 
+
+(set! *warn-on-reflection* true)
 ;; Decisions:
 ;; - it looks ok to allow mixed keys and let the end user manage them
 ;; - it is of course way faster to use a typed version of AttributeKey manually instead of relying on reflection
@@ -16,7 +19,7 @@
 
 (defn key->String [key]
   (if (keyword? key)
-    ^String (-> key .-sym .getName)                         ;; Keyword -> Symbol -> name
+    ^String (-> ^Keyword key .-sym .getName)                         ;; Keyword -> Symbol -> name
     ^String (str key)))
 
 (defn build-map [attr-map]
@@ -50,7 +53,7 @@
   (if (= AttributeKey (class key))
     ^AttributeKey key
     (if (keyword? key)
-      ^String (-> key .-sym .getName)                       ;; Keyword -> Symbol -> name
+      ^String (-> ^Keyword key .-sym .getName)                       ;; Keyword -> Symbol -> name
       ^String (str key))))
 
 (defn build-map-with-mixed-keys [attr-map]
@@ -79,7 +82,7 @@
 
 (comment
   ;; Try different implementations to evaluate choices we have
-  (use 'criterium.core)
+  (use 'criterium.core
 
   ;; Conclusions:
   ;- with string keys 115µs +/- 8
@@ -92,15 +95,15 @@
   ;  >> OK
 
 
-  (bench
-    (build-map {"foo"  "bar"
-                "foo2" (long 121321231)
-                "foo3" false
-                "foo4" (double 309240293490)
-                "foo5" (string-array ["123123" "adasdasdasdasdasd" "1231@#123"])
-                "foo6" (boolean-array [false true true])
-                "foo7" (long-array [1 192 10212 221])
-                "foo8" (double-array [10921290 121212])}))
+    (bench
+      (build-map {"foo"  "bar"
+                  "foo2" (long 121321231)
+                  "foo3" false
+                  "foo4" (double 309240293490)
+                  "foo5" (string-array ["123123" "adasdasdasdasdasd" "1231@#123"])
+                  "foo6" (boolean-array [false true true])
+                  "foo7" (long-array [1 192 10212 221])
+                  "foo8" (double-array [10921290 121212])})))
   ; Evaluation count : 558600 in 60 samples of 9310 calls.
   ;             Execution time mean : 115.286526 µs
   ;    Execution time std-deviation : 8.073000 µs
