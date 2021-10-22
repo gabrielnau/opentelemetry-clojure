@@ -134,8 +134,9 @@
 (defn update-name [span new-name]
   (.updateName ^Span span ^String new-name))
 
-(defn get-context [span]
-  (.getContext ^Span span))
+;; NOT Context, but SpanContext
+(defn get-span-context [span]
+  (.getSpanContext ^Span span))
 
 (defn recording? [span]
   (.isRecording ^Span span))
