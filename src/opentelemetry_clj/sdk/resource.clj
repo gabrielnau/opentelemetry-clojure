@@ -1,9 +1,24 @@
 (ns opentelemetry-clj.sdk.resource
-  (:require [clojure.core.protocols :as protocols])
+  "Implements OpenTelemetry [Resource](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/resource/sdk.md)).
+
+  See [Resource Semantic Conventions](https://github.com/open-telemetry/opentelemetry-specification/tree/main/specification/resource/semantic_conventions).
+
+  *Warning:* this namespace requires the dependency `io.opentelemetry/opentelemetry-sdk` that should be set manually or available in classpath if using the java agent.
+  "
+  (:require [opentelemetry-clj.attribute :as attribute])
   (:import (io.opentelemetry.sdk.resources Resource)
            (io.opentelemetry.api.common Attributes)))
 
-(defn create
-  "TODO: from javadoc https://github.com/open-telemetry/opentelemetry-java/blob/main/sdk/common/src/main/java/io/opentelemetry/sdk/resources/Resource.java#L26"
-  ([attributes] (Resource/create ^Attributes attributes))
-  ([attributes schema-url] (Resource/create ^Attributes attributes ^String schema-url)))
+(set! *warn-on-reflection* true)
+
+(defn new
+  "Returns a new `Resource` with given `:attributes` and optionnal `:schema-url`
+
+  Arguments:
+  - `attributes`: Map of attributes, see [[opentelemetry-clj.attribute/new]]
+  - `schema-url`: Optionnal, a string"
+  ([attributes] (Resource/create ^Attributes (attribute/new attributes)))
+  ([attributes schema-url] (Resource/create ^Attributes (attribute/new attributes) ^String schema-url)))
+
+
+;;FIXME: incomplete API, should handle merge etc
