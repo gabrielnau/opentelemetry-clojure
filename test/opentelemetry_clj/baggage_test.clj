@@ -32,10 +32,10 @@
 
 (deftest is-empty
   (let [empty-baggage     (Baggage/empty)
-        not-empty-baggage (core/new-baggage (gen/generate (s/gen ::baggage/arguments)))]
+        not-empty-baggage (core/new-baggage (gen/generate
+                                              (gen/not-empty (s/gen ::baggage/arguments))))]
     (is (subject/is-empty empty-baggage))
-    (is (not
-          (subject/is-empty not-empty-baggage)))))
+    (is (not (subject/is-empty not-empty-baggage)))))
 
 (deftest with-value
   (let [baggage (core/new-baggage (gen/generate (s/gen ::baggage/arguments)))
