@@ -1,9 +1,16 @@
+;; FIXME: should be moved into /sdk directory, since it uses some SDK classes ?
+
 (ns opentelemetry-clj.datafy
-  "Separate namespace so if using an old clojure version, can still use this lib without using Datafy"
+  "Turn OpenTelementry Java Objects into data.
+
+  Used in tests but can be useful in development to instrospect Spans etc.
+
+  *Warning:* this namespace isn't required by opentelemetry-clj.core in order to support older Clojure versions, so it has to be manually required.
+  "
   (:require [clojure.core.protocols :as protocols]
             [clojure.datafy :refer [datafy]])
   (:import
-    (io.opentelemetry.api.baggage Baggage ImmutableBaggage BaggageEntryMetadata BaggageEntry AutoValue_ImmutableEntry)
+    (io.opentelemetry.api.baggage ImmutableBaggage AutoValue_ImmutableEntry)
     (io.opentelemetry.api.common Attributes ArrayBackedAttributes)
     (io.opentelemetry.api.trace TraceFlags TraceState SpanContext)
     (io.opentelemetry.sdk.common InstrumentationLibraryInfo)
@@ -82,7 +89,6 @@
           context        (.getSpanContext span-data)
           parent-context (.getParentSpanContext span-data)]
       ;; todo: display parent-context if present, else display none
-
       {:name                    (.getName span-data)
        :trace-id                (.getTraceId context)
        :span-id                 (.getSpanId context)
