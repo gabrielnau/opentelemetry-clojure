@@ -6,6 +6,7 @@
   {:extra-paths ["test"]
    :extra-deps {org.clojure/test.check {:mvn/version "1.1.0"}
                 lambdaisland/kaocha {:mvn/version "1.0.902"}
+                nubank/matcher-combinators {:mvn/version "3.3.1"}
                 io.opentelemetry/opentelemetry-sdk {:mvn/version "1.7.0"}
                 io.opentelemetry/opentelemetry-sdk-testing {:mvn/version "1.7.0"}}}
   :example

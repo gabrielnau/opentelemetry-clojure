@@ -3,12 +3,15 @@
   ;; (i.e. lib authors)
   ;; - opentelemetry-clj.sdk.*
   ;; - opentelemetry-clj.datafy
-  (:require [opentelemetry-clj.trace.span]
-            [opentelemetry-clj.context]
-            [opentelemetry-clj.attribute])
-  (:import (io.opentelemetry.api GlobalOpenTelemetry)
-           (io.opentelemetry.api.baggage Baggage)
-           (io.opentelemetry.context Context)))
+  (:require
+    [opentelemetry-clj.attribute :as attribute]
+    [opentelemetry-clj.baggage :as baggage]
+    [opentelemetry-clj.context :as context]
+    [opentelemetry-clj.trace.span :as trace-span])
+  (:import
+    (io.opentelemetry.api GlobalOpenTelemetry)
+    (io.opentelemetry.api.baggage Baggage BaggageBuilder)
+    (io.opentelemetry.context Context)))
 
 ;; requirements:
 ;; - concise API for general use cases
@@ -26,13 +29,20 @@
   ([instrumentation-name instrumentation-version]
    (GlobalOpenTelemetry/getTracer ^String instrumentation-name ^String instrumentation-version)))
 
-(defn baggage-from-implicit-context []
+;; Baggage
+
+(defn new-baggage [values]
+  (-> (Baggage/builder)
+    ^BaggageBuilder (baggage/put-values values)
+    .build))
+
+(defn get-baggage-from-implicit-context []
   (Baggage/current))
 
-(defn baggage-from-explicit-context [context]
+(defn get-baggage-from-explicit-context [context]
   (Baggage/fromContext ^Context context))
 
-(defn ^Context store-baggage-in-context [baggage context]
+(defn ^Context set-baggage-in-context [baggage context]
   (.storeInContext ^Baggage baggage ^Context context))
 
 (comment

@@ -2,13 +2,14 @@
   "Separate namespace so if using an old clojure version, can still use this lib without using Datafy"
   (:require [clojure.core.protocols :as protocols]
             [clojure.datafy :refer [datafy]])
-  (:import (io.opentelemetry.api.common Attributes ArrayBackedAttributes)
-           (io.opentelemetry.sdk.common InstrumentationLibraryInfo)
-           (io.opentelemetry.sdk.trace.data EventData)
-           (io.opentelemetry.api.trace TraceFlags TraceState SpanContext)
-           (io.opentelemetry.sdk.resources AutoValue_Resource Resource)
-           (io.opentelemetry.sdk.trace RecordEventsReadableSpan)))
-
+  (:import
+    (io.opentelemetry.api.baggage Baggage ImmutableBaggage BaggageEntryMetadata BaggageEntry AutoValue_ImmutableEntry)
+    (io.opentelemetry.api.common Attributes ArrayBackedAttributes)
+    (io.opentelemetry.api.trace TraceFlags TraceState SpanContext)
+    (io.opentelemetry.sdk.common InstrumentationLibraryInfo)
+    (io.opentelemetry.sdk.resources AutoValue_Resource Resource)
+    (io.opentelemetry.sdk.trace RecordEventsReadableSpan)
+    (io.opentelemetry.sdk.trace.data EventData)))
 
 (extend-protocol protocols/Datafiable
   InstrumentationLibraryInfo
@@ -59,12 +60,22 @@
   (datafy [resource]
     {:schema-url (.getSchemaUrl resource)
      :attributes (datafy (.getAttributes resource))})       ;; FIXME
-  Resource ;; not used ? see tests
+  Resource                                                  ;; not used ? see tests
   (datafy [r]
     {:valid?     (.isValid r)
      :schema-url (.getSchemaUrl r)
      :version    (.readVersion r)
      :attributes (datafy (.getAttributes r))})
+  ImmutableBaggage
+  (datafy [x]
+    (let [as-map (into {} (.asMap x))]
+      (reduce-kv
+        (fn [acc k v] (assoc acc (str k) (datafy v)))
+        {}
+        as-map)))
+  AutoValue_ImmutableEntry
+  (datafy [x]
+    {:value (.getValue x) :metadata (.getValue (.getMetadata x))})
   RecordEventsReadableSpan
   (datafy [span]
     (let [span-data      (.toSpanData span)
