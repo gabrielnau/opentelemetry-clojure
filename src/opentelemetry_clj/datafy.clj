@@ -51,7 +51,7 @@
      :epoch-nanos              (.getEpochNanos event)
      :attributes-count         (.getTotalAttributeCount event)
      :dropped-attributes-count (.getDroppedAttributesCount event)})
-  ArrayBackedAttributes
+  Attributes
   (datafy [attrs]
     (let [result (transient {})]
       (.forEach attrs

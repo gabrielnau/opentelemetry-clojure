@@ -7,6 +7,7 @@
             [opentelemetry-clj.generators :as generators]
             [opentelemetry-clj.datafy]
             [clojure.datafy :refer [datafy]]
+            [opentelemetry-clj.test-utils :as test-utils]
             [opentelemetry-clj.attribute :as subject]
             [matcher-combinators.matchers :as m])
   (:import (io.opentelemetry.api.common AttributeKey Attributes)))
@@ -29,11 +30,7 @@
           (is (= key (.getKey result)))
           (is (= type (AttributeType->keyword (.getType result)))))))))
 
-(defn attribute-args->map [args]
-  (reduce
-    (fn [acc [k v]] (assoc acc (datafy k) (datafy v)))
-    {}
-    args))
+
 
 (deftest new
   (testing "build Attributes"
@@ -42,7 +39,7 @@
       (prop/for-all [args (generators/attributes-map-generator)]
         (let [result        (subject/new args)
               result-as-map (datafy result)
-              args-as-map   (attribute-args->map args)]
+              args-as-map   (test-utils/attribute-arguments->map args)]
           (is (instance? Attributes result))
           ;(when-not (= (count (keys args-as-map))
           ;            (count (keys result-as-map)))
