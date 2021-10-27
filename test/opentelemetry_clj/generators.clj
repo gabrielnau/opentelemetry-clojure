@@ -28,11 +28,11 @@
   {:string        string-generator
    :boolean       gen/boolean
    :long          gen/large-integer
-   :double        simple-double})
-   ;:string-array  (gen/fmap attribute/string-array (gen/vector string-generator 1 10))
-   ;:boolean-array (gen/fmap boolean-array (gen/vector gen/boolean 1 10))
-   ;:long-array    (gen/fmap long-array (gen/vector gen/large-integer 1 50))
-   ;:double-array  (gen/fmap long-array (gen/vector simple-double 1 50))})
+   :double        simple-double
+   :string-array  (gen/fmap attribute/string-array (gen/vector string-generator 1 10))
+   :boolean-array (gen/fmap boolean-array (gen/vector gen/boolean 1 10))
+   :long-array    (gen/fmap long-array (gen/vector gen/large-integer 1 50))
+   :double-array  (gen/fmap long-array (gen/vector simple-double 1 50))})
 
 (def attribute-types-list (keys type->generator))
 
@@ -49,7 +49,6 @@
            string-generator))])))
 
 (defn attribute-value-generator [type]
-  ;; if (key == null || key.getKey().isEmpty() || value == null) {
   (gen/such-that
     #(not (str/blank? (str %)))
     (get type->generator type)))
@@ -58,14 +57,12 @@
   (gen/fmap
     ;; FIXME: we shall use gen/map such as there is no key conflicts, and we loose proper shrink
     #(into {} %)
-    (gen/vector-distinct
+    (gen/vector
       (gen/let [type attribute-type-generator
                 key (attribute-key-generator type)
                 value (attribute-value-generator type)]
         [key value])
-      ;; FIXME: see the upperbound limit
-      ;; max el > 1 breaks specs
-      {:min-elements 1 :max-elements 1})))
+      1 1))) ;; FIXME: see the upperbound limit
 
 ;; Baggage
 
