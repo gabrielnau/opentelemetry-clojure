@@ -10,11 +10,14 @@
 ;; General purpose
 
 (def string-generator
-  (gen/fmap #(-> (str/join %)
-               (str/replace #" " ""))
-    ;(gen/resize gen/small-integer) ;; TODO: upper bound ?
-    (gen/not-empty
-      (gen/vector gen/char-ascii 40))))
+  (gen/fmap
+    #(str %)
+    gen/uuid))
+  ;(gen/fmap #(-> (str/join %)
+  ;             (str/replace #" " ""))
+  ;  ;(gen/resize gen/small-integer) ;; TODO: upper bound ?
+  ;  (gen/not-empty
+  ;    (gen/vector gen/char-ascii 40))))
 
 (def simple-double (gen/double* {:infinite? false
                                  :NaN?      false}))
@@ -25,11 +28,11 @@
   {:string        string-generator
    :boolean       gen/boolean
    :long          gen/large-integer
-   :double        simple-double
-   :string-array  (gen/fmap attribute/string-array (gen/vector string-generator 1 10))
-   :boolean-array (gen/fmap boolean-array (gen/vector gen/boolean 1 10))
-   :long-array    (gen/fmap long-array (gen/vector gen/large-integer 1 50))
-   :double-array  (gen/fmap long-array (gen/vector simple-double 1 50))})
+   :double        simple-double})
+   ;:string-array  (gen/fmap attribute/string-array (gen/vector string-generator 1 10))
+   ;:boolean-array (gen/fmap boolean-array (gen/vector gen/boolean 1 10))
+   ;:long-array    (gen/fmap long-array (gen/vector gen/large-integer 1 50))
+   ;:double-array  (gen/fmap long-array (gen/vector simple-double 1 50))})
 
 (def attribute-types-list (keys type->generator))
 
@@ -39,22 +42,30 @@
   (gen/such-that
     #(not (empty? (datafy %)))
     (gen/one-of
-      [string-generator
-       (gen/fmap #(attribute/new-key % attribute-type) string-generator)])))
+      [(gen/not-empty
+         string-generator)
+       (gen/fmap #(attribute/new-key % attribute-type)
+         (gen/not-empty
+           string-generator))])))
 
 (defn attribute-value-generator [type]
-  (get type->generator type))
+  ;; if (key == null || key.getKey().isEmpty() || value == null) {
+  (gen/such-that
+    #(not (str/blank? (str %)))
+    (get type->generator type)))
 
 (defn attributes-map-generator []
   (gen/fmap
+    ;; FIXME: we shall use gen/map such as there is no key conflicts, and we loose proper shrink
     #(into {} %)
-    (gen/vector
+    (gen/vector-distinct
       (gen/let [type attribute-type-generator
                 key (attribute-key-generator type)
                 value (attribute-value-generator type)]
         [key value])
-      1
-      1)))                                                ;; TODO: see the upperbound limit
+      ;; FIXME: see the upperbound limit
+      ;; max el > 1 breaks specs
+      {:min-elements 1 :max-elements 1})))
 
 ;; Baggage
 
