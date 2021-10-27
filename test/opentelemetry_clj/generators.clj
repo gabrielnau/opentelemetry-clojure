@@ -4,7 +4,8 @@
     [opentelemetry-clj.datafy]
     [clojure.datafy :refer [datafy]]
     [opentelemetry-clj.attribute :as attribute]
-    [clojure.string :as str]))
+    [clojure.string :as str]
+    [clojure.spec.alpha :as s]))
 
 ;; General purpose
 
@@ -55,8 +56,13 @@
       1
       1)))                                                ;; TODO: see the upperbound limit
 
-(comment
-  (gen/sample (attributes-map-generator))
-  (gen/sample (attribute-key-generator :long) 100)
-  (gen/generate string-generator 10000))
+;; Baggage
 
+(s/def ::non-blank-string (s/and string? (complement str/blank?)))
+(s/def ::value ::non-blank-string)
+(s/def ::metadata ::non-blank-string)
+
+(s/def ::arguments
+  (s/map-of
+    ::non-blank-string
+    (s/keys :req-un [::value] :opt-un [::metadata])))

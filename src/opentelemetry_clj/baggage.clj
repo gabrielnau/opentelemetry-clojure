@@ -1,7 +1,5 @@
 (ns opentelemetry-clj.baggage
   "Implements OpenTelemetry [Baggage](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/overview.md#baggage-signal) (complete specification [here](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/baggage/api.md))."
-  (:require [clojure.spec.alpha :as s]
-            [clojure.string :as str])
   (:import (io.opentelemetry.api.baggage Baggage BaggageBuilder BaggageEntryMetadata)))
 
 (set! *warn-on-reflection* true)
@@ -9,22 +7,6 @@
 (defn ^:no-doc metadata->BaggageEntryMetadata [metadata]
   (BaggageEntryMetadata/create ^String metadata))
 
-;; TODO: where to put these specs using in tests mainly ?
-(s/def ::non-blank-string (s/and string? (complement str/blank?)))
-(s/def ::value ::non-blank-string)
-(s/def ::metadata ::non-blank-string)
-(s/def ::arguments-without-metadata
-  (s/map-of
-    ::non-blank-string
-    (s/keys :req-un [::value])))
-(s/def ::arguments-with-metadata
-  (s/map-of
-    ::non-blank-string
-    (s/keys :req-un [::value ::metadata])))
-(s/def ::arguments
-  (s/map-of
-    ::non-blank-string
-    (s/keys :req-un [::value] :opt-un [::metadata])))
 
 (defn put-values
   "There shouldn't be the need to use this function directly. TODO: add 'see these fns'
@@ -47,7 +29,6 @@
       \"app.version\" {:value \"0.10.0\" :metadata \"some-metadata-string\"}
     })
   ```
-
   "
   [builder values]
   (doseq [v values]

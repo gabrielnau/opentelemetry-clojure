@@ -1,13 +1,14 @@
 (ns opentelemetry-clj.baggage-test
   (:require [clojure.test :refer :all]
             [matcher-combinators.test]
+            [matcher-combinators.matchers :as m]
             [clojure.test.check :as test-check]
             [clojure.test.check.properties :as prop]
             [clojure.spec.alpha :as s]
             [clojure.spec.gen.alpha :as gen]
             [clojure.datafy :refer [datafy]]
 
-            [matcher-combinators.matchers :as m]
+
             [opentelemetry-clj.baggage :as subject]
             [opentelemetry-clj.core :as core]
             [opentelemetry-clj.datafy]
@@ -40,8 +41,7 @@
 (deftest with-value
   (let [baggage (core/new-baggage (gen/generate (s/gen ::baggage/arguments)))
         values  (gen/generate (s/gen ::baggage/arguments))
-        result  (->
-                   (subject/with-values baggage values)
+        result  (-> (subject/with-values baggage values)
                    datafy)]
     ;;; FIXME: matcher-combinator should allow to do this more easily?
     (doseq [[k v] values]
