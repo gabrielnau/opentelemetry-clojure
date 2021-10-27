@@ -9,6 +9,8 @@
             [clojure.datafy :refer [datafy]]
 
 
+            [opentelemetry-clj.generators]
+
             [opentelemetry-clj.baggage :as subject]
             [opentelemetry-clj.core :as core]
             [opentelemetry-clj.datafy]
@@ -17,7 +19,7 @@
 
 
 (deftest get-key
-  (let [args (gen/generate (s/gen ::baggage/arguments))
+  (let [args (gen/generate (s/gen :baggage/arguments))
         baggage (core/new-baggage args)
         [some-key some-val] (first args)]
     (is (= nil (subject/get-key baggage "non-existent-key")))
@@ -26,7 +28,7 @@
 (deftest size
   (test-check/quick-check
     100
-    (prop/for-all [args (s/gen ::baggage/arguments)]
+    (prop/for-all [args (s/gen :baggage/arguments)]
       (let [baggage (core/new-baggage args)]
         (is (= (baggage/size baggage)
               (count (keys args))))))))
@@ -34,13 +36,13 @@
 (deftest is-empty
   (let [empty-baggage     (Baggage/empty)
         not-empty-baggage (core/new-baggage (gen/generate
-                                              (gen/not-empty (s/gen ::baggage/arguments))))]
+                                              (gen/not-empty (s/gen :baggage/arguments))))]
     (is (subject/is-empty empty-baggage))
     (is (not (subject/is-empty not-empty-baggage)))))
 
 (deftest with-value
-  (let [baggage (core/new-baggage (gen/generate (s/gen ::baggage/arguments)))
-        values  (gen/generate (s/gen ::baggage/arguments))
+  (let [baggage (core/new-baggage (gen/generate (s/gen :baggage/arguments)))
+        values  (gen/generate (gen/not-empty (s/gen :baggage/arguments)))
         result  (-> (subject/with-values baggage values)
                    datafy)]
     ;;; FIXME: matcher-combinator should allow to do this more easily?

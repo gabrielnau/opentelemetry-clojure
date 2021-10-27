@@ -62,7 +62,18 @@
 (s/def ::value ::non-blank-string)
 (s/def ::metadata ::non-blank-string)
 
-(s/def ::arguments
+(s/def :baggage/arguments
   (s/map-of
     ::non-blank-string
     (s/keys :req-un [::value] :opt-un [::metadata])))
+(s/def :baggage/arguments-without-metadata
+  (s/map-of
+    ::non-blank-string
+    (s/keys :req-un [::value])))
+(s/def :baggage/arguments-with-metadata
+  (s/map-of
+    ::non-blank-string
+    (s/keys :req-un [::value ::metadata])))
+
+;; Ressource
+

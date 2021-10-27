@@ -17,7 +17,7 @@
   (testing "assigns correct key and value, without metadata"
     (test-check/quick-check
       100
-      (prop/for-all [args (s/gen ::baggage/arguments-without-metadata)]
+      (prop/for-all [args (s/gen :baggage/arguments-without-metadata)]
         (let [baggage        (subject/new-baggage args)
               baggage-as-map (datafy baggage)]
           (is (instance? Baggage baggage))
@@ -33,7 +33,7 @@
   (testing "assigns correct key and value, with metadata"
     (test-check/quick-check
       100
-      (prop/for-all [args (s/gen ::baggage/arguments-with-metadata)]
+      (prop/for-all [args (s/gen :baggage/arguments-with-metadata)]
         (let [baggage        (subject/new-baggage args)
               baggage-as-map (datafy baggage)]
           (is (instance? Baggage baggage))
