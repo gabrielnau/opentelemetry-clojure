@@ -1,5 +1,5 @@
 (ns opentelemetry-clj.attribute
-  "Implements OpenTelemetry [Attribute](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/attribute-naming.md))."
+  "Implements OpenTelemetry [Attribute](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/attribute-naming.md)."
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.spec.gen.alpha :as gen]
@@ -19,7 +19,7 @@
   [items]
   (into-array String items))
 
-(defn ^Attributes new
+(defn ^Attributes attributes
   "Returns a new instance of `Attributes` from the given key-values pairs in `attributes-map`.
 
   It is recommended to pre-allocate your AttributeKey keys if possible. See [[new-key]].
@@ -63,7 +63,7 @@
           (.put builder ^String k (nth a 1)))))
     (.build builder)))
 
-(defn new-key
+(defn key
   "Return an AttributeKey instance typed to the expected matching attribute's value.
 
   It is recommended to pre-allocate your AttributeKey keys if possible.

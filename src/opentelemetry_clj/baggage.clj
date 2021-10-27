@@ -1,6 +1,7 @@
 (ns opentelemetry-clj.baggage
   "Implements OpenTelemetry [Baggage](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/overview.md#baggage-signal) (complete specification [here](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/baggage/api.md))."
-  (:import (io.opentelemetry.api.baggage Baggage BaggageBuilder BaggageEntryMetadata)))
+  (:import (io.opentelemetry.api.baggage Baggage BaggageBuilder BaggageEntryMetadata)
+           (io.opentelemetry.context Context)))
 
 (set! *warn-on-reflection* true)
 
@@ -41,6 +42,11 @@
         (.put ^BaggageBuilder builder ^String key ^String value))))
   builder)
 
+(defn new-baggage [values]
+  (-> (Baggage/builder)
+    ^BaggageBuilder (put-values values)
+    .build))
+
 ;; TODO: better naming
 (defn with-values
   "Given an already built `baggage`, returns a new Baggage instance with added (or overriden) values"
@@ -67,3 +73,12 @@
   "Returns the number of keys contained in the given `baggage`"
   [baggage]
   (.size ^Baggage baggage))
+
+(defn get-from-implicit-context []
+  (Baggage/current))
+
+(defn get-from-explicit-context [context]
+  (Baggage/fromContext ^Context context))
+
+(defn ^Context set-in-context [baggage context]
+  (.storeInContext ^Baggage baggage ^Context context))

@@ -17,8 +17,7 @@
   Arguments:
   - `attributes`: Map of attributes, see [[opentelemetry-clj.attribute/new]]
   - `schema-url`: Optionnal, a string"
-  ([attributes] (Resource/create ^Attributes (attribute/new attributes)))
-  ([attributes schema-url] (Resource/create ^Attributes (attribute/new attributes) ^String schema-url)))
-
+  ([attributes] (Resource/create ^Attributes (attribute/attributes attributes)))
+  ([attributes schema-url] (Resource/create ^Attributes (attribute/attributes attributes) ^String schema-url)))
 
 ;;FIXME: incomplete API, should handle merge etc

@@ -1,4 +1,8 @@
 (ns opentelemetry-clj.context
+  "Implement OpenTelemetry [Context](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/context/context.md).
+
+
+  "
   (:import (io.opentelemetry.context Context ImplicitContextKeyed)
            (java.util.concurrent ExecutorService Executor ScheduledExecutorService)))
 
@@ -32,7 +36,6 @@
   TODO: example code
   "
   []
-  ;; clojure.lang.Agent/soloExecutor
   (set-agent-send-off-executor! (wrap-executor clojure.lang.Agent/soloExecutor)))
 
 (comment

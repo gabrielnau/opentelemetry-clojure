@@ -1,10 +1,8 @@
 (ns opentelemetry-clj.test-utils
-  (:require [clojure.spec.gen.alpha :as gen]
-            [clojure.spec.alpha :as s]
-
-            [clojure.datafy :refer [datafy]]
-            [opentelemetry-clj.datafy]
-            [opentelemetry-clj.trace.span :as span])
+  (:require
+    [clojure.datafy :refer [datafy]]
+    [opentelemetry-clj.sdk.datafy]
+    [opentelemetry-clj.trace.span :as span])
   (:import (io.opentelemetry.sdk.trace SdkTracerProvider)
            (io.opentelemetry.sdk.trace.export SimpleSpanProcessor)
            (io.opentelemetry.sdk OpenTelemetrySdk)
@@ -23,8 +21,6 @@
 
 (comment
   (macroexpand '(with-exporter-reset (do :bar))))
-
-
 
 (defn get-tracer-and-exporter []
   (let [memory-exporter (InMemorySpanExporter/create)
@@ -54,22 +50,17 @@
 
 ;; generators
 
-(def span-name #(gen/generate (s/gen string?)))
-
 (defn spans []
   (.getFinishedSpanItems *memory-exporter*))
 
-;; Span
-
 (defn built-span [options]
-  (-> (span/new *tracer* options)
+  (-> (span/new-builder *tracer* options)
     span/start))
 
 (defn closed-span [options]
   (let [span (built-span options)]
-    (span/end span)
+    (span/end! span)
     span))
-
 
 ;; Attributes
 

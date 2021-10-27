@@ -1,25 +1,24 @@
-;; FIXME: should be moved into /sdk directory, since it uses some SDK classes ?
-
-(ns opentelemetry-clj.datafy
-  "Turn OpenTelementry Java Objects into data.
+(ns opentelemetry-clj.sdk.datafy
+  "Turn OpenTelementry Java Objects into data. Implement Clojure Datafiable protocol.
 
   Used in tests but can be useful in development to instrospect Spans etc.
 
-  *Warning:* this namespace isn't required by opentelemetry-clj.core in order to support older Clojure versions, so it has to be manually required.
+  It is on purpose some classes from the SDK instead of the API are used: for example, API doesn't provide a way to read attributes from a Span, but it's specified in SDK since it's only needed for exporters. See [this discussion](https://cloud-native.slack.com/archives/C0150QF88FL/p1635258042025900).
+
+  *Warning:* this namespace requires the dependency `io.opentelemetry/opentelemetry-sdk` that should be set manually or available in classpath if using the java agent.
   "
   (:require [clojure.core.protocols :as protocols]
-            [clojure.datafy :refer [datafy]]
-            [opentelemetry-clj.attribute :as attribute])
+            [clojure.datafy :refer [datafy]])
   (:import
     (io.opentelemetry.api.baggage ImmutableBaggage AutoValue_ImmutableEntry)
-    (io.opentelemetry.api.common Attributes ArrayBackedAttributes)
+    (io.opentelemetry.api.common Attributes)
+    (io.opentelemetry.api.internal InternalAttributeKeyImpl)
     (io.opentelemetry.api.trace TraceFlags TraceState SpanContext)
     (io.opentelemetry.sdk.common InstrumentationLibraryInfo)
     (io.opentelemetry.sdk.resources AutoValue_Resource Resource)
     (io.opentelemetry.sdk.trace RecordEventsReadableSpan)
     (io.opentelemetry.sdk.trace.data EventData)
-    (java.util.function BiConsumer)
-    (io.opentelemetry.api.internal InternalAttributeKeyImpl)))
+    (java.util.function BiConsumer)))
 
 ;; Primitive arrays, see https://clojure.atlassian.net/browse/CLJ-1381
 (extend-protocol protocols/Datafiable
@@ -39,11 +38,13 @@
   (datafy [x] (into [] x)))
 
 (extend-protocol protocols/Datafiable
+
   InstrumentationLibraryInfo
   (datafy [x]
     {:name       (.getName x)
      :version    (.getVersion x)
      :schema-url (.getSchemaUrl x)})
+
   EventData
   (datafy [event]
     {:name                     (.getName event)
@@ -51,6 +52,7 @@
      :epoch-nanos              (.getEpochNanos event)
      :attributes-count         (.getTotalAttributeCount event)
      :dropped-attributes-count (.getDroppedAttributesCount event)})
+
   Attributes
   (datafy [attrs]
     (let [result (transient {})]
@@ -58,21 +60,25 @@
         (reify
           BiConsumer
           (accept [_ k v]
-            (assoc! result (.getKey k) (datafy v))))) ;; datafy value for primitive arrays
+            (assoc! result (.getKey k) (datafy v)))))       ;; datafy value for primitive arrays
       (persistent! result)))
+
   InternalAttributeKeyImpl
   (datafy [k]
     (.getKey k))
+
   TraceFlags
   (datafy [trace-flags]
     {:hex      (.asHex trace-flags)
      :sampled? (.isSampled trace-flags)})
+
   TraceState
   (datafy [trace-state]
     (let [a (.asMap trace-state)]                           ;; TODO: forEach
       (if (.isEmpty a)
         {}
         (datafy a))))
+
   SpanContext
   (datafy [context]
     {:trace-id    (.getTraceId context)
@@ -82,16 +88,19 @@
      :trace-state (datafy (.getTraceState context))
      :valid?      (.isValid context)
      :remote?     (.isRemote context)})
+
   AutoValue_Resource
   (datafy [resource]
     {:schema-url (.getSchemaUrl resource)
      :attributes (datafy (.getAttributes resource))})       ;; FIXME
+
   Resource                                                  ;; not used ? see tests
   (datafy [r]
     {:valid?     (.isValid r)
      :schema-url (.getSchemaUrl r)
      :version    (.readVersion r)
      :attributes (datafy (.getAttributes r))})
+
   ImmutableBaggage
   (datafy [x]
     (let [as-map (into {} (.asMap x))]
@@ -99,9 +108,11 @@
         (fn [acc k v] (assoc acc (str k) (datafy v)))
         {}
         as-map)))
+
   AutoValue_ImmutableEntry
   (datafy [x]
     {:value (.getValue x) :metadata (.getValue (.getMetadata x))})
+
   RecordEventsReadableSpan
   (datafy [span]
     (let [span-data      (.toSpanData span)
@@ -115,12 +126,10 @@
        :parent-context          (datafy parent-context)
        :context                 (datafy context)
        :attributes              (datafy (.getAttributes span-data))
-
        :resource                (datafy (.getResource span-data))
        :status                  (-> (.getStatus span-data) .getStatusCode str)
        :recording?              (.isRecording span)
        :ended?                  (.hasEnded span-data)
-
        :links                   (->> (.getLinks span-data) (into []))
        :events                  (->> (.getEvents span-data)
                                   (map datafy))
@@ -131,4 +140,3 @@
                                  :end-epoch-nanos   (.getEndEpochNanos span-data)
                                  :latency           (.getLatencyNanos span)}
        :instrumentation-library (datafy (.getInstrumentationLibraryInfo span-data))})))
-
