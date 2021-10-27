@@ -8,7 +8,8 @@
   *Warning:* this namespace isn't required by opentelemetry-clj.core in order to support older Clojure versions, so it has to be manually required.
   "
   (:require [clojure.core.protocols :as protocols]
-            [clojure.datafy :refer [datafy]])
+            [clojure.datafy :refer [datafy]]
+            [opentelemetry-clj.attribute :as attribute])
   (:import
     (io.opentelemetry.api.baggage ImmutableBaggage AutoValue_ImmutableEntry)
     (io.opentelemetry.api.common Attributes ArrayBackedAttributes)
@@ -16,7 +17,26 @@
     (io.opentelemetry.sdk.common InstrumentationLibraryInfo)
     (io.opentelemetry.sdk.resources AutoValue_Resource Resource)
     (io.opentelemetry.sdk.trace RecordEventsReadableSpan)
-    (io.opentelemetry.sdk.trace.data EventData)))
+    (io.opentelemetry.sdk.trace.data EventData)
+    (java.util.function BiConsumer)
+    (io.opentelemetry.api.internal InternalAttributeKeyImpl)))
+
+;; Primitive arrays, see https://clojure.atlassian.net/browse/CLJ-1381
+(extend-protocol protocols/Datafiable
+  (Class/forName "[Ljava.lang.String;")                     ;; String[]
+  (datafy [x] (into [] x)))
+
+(extend-protocol protocols/Datafiable
+  (Class/forName "[Z")                                      ;; Boolean[]
+  (datafy [x] (into [] x)))
+
+(extend-protocol protocols/Datafiable
+  (Class/forName "[J")                                      ;; Long[]
+  (datafy [x] (into [] x)))
+
+(extend-protocol protocols/Datafiable
+  (Class/forName "[D")                                      ;; Double[]
+  (datafy [x] (into [] x)))
 
 (extend-protocol protocols/Datafiable
   InstrumentationLibraryInfo
@@ -27,30 +47,29 @@
   EventData
   (datafy [event]
     {:name                     (.getName event)
-     :attributes               (->> (.getAttributes event)
-                                 (map datafy))
+     :attributes               (map datafy (.getAttributes event))
      :epoch-nanos              (.getEpochNanos event)
      :attributes-count         (.getTotalAttributeCount event)
      :dropped-attributes-count (.getDroppedAttributesCount event)})
   ArrayBackedAttributes
   (datafy [attrs]
-    (let [a (.asMap attrs)]
-      (if (.isEmpty a)
-        []
-        (datafy a))))
-  Attributes
-  (datafy [attrs]
-    (let [a (.asMap attrs)]
-      (if (.isEmpty a)
-        []
-        (datafy a))))
+    (let [result (transient {})]
+      (.forEach attrs
+        (reify
+          BiConsumer
+          (accept [_ k v]
+            (assoc! result (.getKey k) (datafy v))))) ;; datafy value for primitive arrays
+      (persistent! result)))
+  InternalAttributeKeyImpl
+  (datafy [k]
+    (.getKey k))
   TraceFlags
   (datafy [trace-flags]
     {:hex      (.asHex trace-flags)
      :sampled? (.isSampled trace-flags)})
   TraceState
   (datafy [trace-state]
-    (let [a (.asMap trace-state)]
+    (let [a (.asMap trace-state)]                           ;; TODO: forEach
       (if (.isEmpty a)
         {}
         (datafy a))))
