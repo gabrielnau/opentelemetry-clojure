@@ -1,10 +1,11 @@
 (ns opentelemetry-clj.attributes
   "Implements OpenTelemetry [Attributes](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/attribute-naming.md)."
+  (:refer-clojure :exclude [get])
   (:import (io.opentelemetry.api.common Attributes AttributeKey AttributeType)
            (java.util.function BiConsumer)))
 
 (defn string-array
-  "Utility function to create a Java String[] from a given list of strings.
+  "Utility function to create a Java String[] from a given list of strings. Used to build an Attribute value.
 
   Example:
   ```clojure
@@ -14,8 +15,6 @@
   [items]
   (into-array String items))
 
-
-; (set! *warn-on-reflection* true)
 
 (defn ^Attributes new
   "Returns a new instance of `Attributes` from the given key-values pairs in `attributes-map`.
@@ -28,7 +27,7 @@
 
   Example:
   ```clojure
-  (opentelemetry-clj.attribute/new
+  (opentelemetry-clj.attributes/new
     {
       ;; with some keys as string
       \"org.acme.ab_testing_a\" \"some-string\"
@@ -61,14 +60,14 @@
           (.put builder ^String k (nth a 1)))))
     (.build builder)))
 
-(defn attribute-key
+(defn new-key
   "Return an AttributeKey instance typed to the expected matching attribute's value.
 
   It is recommended to pre-allocate your AttributeKey keys if possible.
 
   Arguments:
-  - `key-name`: A string. See [conventions](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/attribute-naming.md)
-  - `value-type`: It can be either: `:string` | `:boolean` | `:long` | `:double` | `:string-array` | `:boolean-array` | `:long-array` | `:double-array`
+  - `key-name`: Required, a string. See [conventions](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/attribute-naming.md)
+  - `value-type`: Required, must be one of: `:string` | `:boolean` | `:long` | `:double` | `:string-array` | `:boolean-array` | `:long-array` | `:double-array`
   "
   [key-name value-type]
   (case value-type
@@ -81,7 +80,7 @@
     :long-array (AttributeKey/longArrayKey ^String key-name)
     :double-array (AttributeKey/doubleArrayKey ^String key-name)))
 
-(def- AttributeType->clojurize-fn
+(def AttributeType->clojurize-fn
   {AttributeType/STRING        identity
    AttributeType/BOOLEAN       identity
    AttributeType/LONG          identity
@@ -91,13 +90,28 @@
    AttributeType/LONG_ARRAY    (fn [x] (into [] x))
    AttributeType/DOUBLE_ARRAY  (fn [x] (into [] x))})
 
-(defn ->map [attributes]
+(defn ->map
+  "Returns given `attributes` as data."
+  [^Attributes attributes]
   (let [result (transient {})]
     (.forEach attributes
       (reify
         BiConsumer
         (accept [_ k v]
           (let [attribute-type     (.getType k)
-                clojurize-value-fn (get AttributeType->clojurize-fn attribute-type)]
-            (assoc! result (.getKey k) (clojurize-value-fn v))))))
+                clojurize-value-fn (clojure.core/get AttributeType->clojurize-fn attribute-type)]
+            (assoc! result (.getKey ^AttributeKey k) (clojurize-value-fn v))))))
     (persistent! result)))
+
+(defn get
+  "Returns the value for the given `AttributeKey`, or null if not found.
+
+  If you don't have the `AttributeKey` instance, but a string, you could go through the map representation this:
+  ```clojure
+  (let [attribute-key \"foo\"]
+    (get
+      (attributes/->map attributes)
+      attribute-key))
+  ```"
+  [^Attributes attributes ^AttributeKey attribute-key]
+  (.get attributes attribute-key))

@@ -7,14 +7,16 @@
 
   *Warning:* this namespace requires the dependency `io.opentelemetry/opentelemetry-sdk` that should be set manually or available in classpath if using the java agent.
   "
-  (:require [clojure.core.protocols :as protocols]
-            [clojure.datafy :refer [datafy]]
-            [opentelemetry-clj.baggage :as baggage]
-            [opentelemetry-clj.trace.span :as span]
-            [opentelemetry-clj.attributes :as attribute])
+  (:require
+    [clojure.core.protocols :as protocols]
+    [clojure.datafy :refer [datafy]]
+    [opentelemetry-clj.baggage :as baggage]
+    [opentelemetry-clj.trace.span :as span]
+    [opentelemetry-clj.sdk.resource :as resource]
+    [opentelemetry-clj.attributes :as attributes])
   (:import
     (io.opentelemetry.api.baggage ImmutableBaggage)
-    (io.opentelemetry.api.common Attributes)
+    (io.opentelemetry.api.common Attributes AttributeKey)
     (io.opentelemetry.api.trace TraceFlags TraceState SpanContext)
     (io.opentelemetry.sdk.common InstrumentationLibraryInfo)
     (io.opentelemetry.sdk.resources AutoValue_Resource Resource)
@@ -41,13 +43,13 @@
 
 (extend-protocol protocols/Datafiable
 
-  InstrumentationLibraryInfo ;; in SDK
+  InstrumentationLibraryInfo                                ;; in SDK
   (datafy [x]
     {:name       (.getName x)
      :version    (.getVersion x)
      :schema-url (.getSchemaUrl x)})
 
-  EventData ;; in SDK
+  EventData                                                 ;; in SDK
   (datafy [event]
     {:name                     (.getName event)
      :attributes               (map datafy (.getAttributes event))
@@ -55,8 +57,11 @@
      :attributes-count         (.getTotalAttributeCount event)
      :dropped-attributes-count (.getDroppedAttributesCount event)})
 
+  AttributeKey
+  (datafy [k] ^String (.getKey k))
+
   Attributes
-  (datafy [attrs] (attribute/->map attrs))
+  (datafy [attrs] (attributes/->map attrs))
 
   TraceFlags
   (datafy [trace-flags] (span/trace-flags->map trace-flags))
@@ -67,17 +72,17 @@
   SpanContext
   (datafy [span-context] (span/span-context->map span-context))
 
-  AutoValue_Resource ;; in SDK
+  AutoValue_Resource                                        ;; in SDK
   (datafy [resource]
     (resource/->map resource))
 
-  Resource ;; in SDK
+  Resource                                                  ;; in SDK
   (datafy [resource] (resource/->map resource))
 
   ImmutableBaggage
   (datafy [x] (baggage/->map x))
 
-  RecordEventsReadableSpan ;; in SDK
+  RecordEventsReadableSpan                                  ;; in SDK
   (datafy [span]
     (let [span-data      (.toSpanData span)
           context        (.getSpanContext span-data)

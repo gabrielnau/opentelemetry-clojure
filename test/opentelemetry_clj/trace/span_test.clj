@@ -17,7 +17,7 @@
 (deftest start
   (let [[tracer _] (utils/get-tracer-and-exporter)
         b    (subject/new-builder tracer {:name "foo"})
-        span (subject/start b)]
+        span (subject/start! b)]
     (is (instance? Span span))))
 
 (deftest build-span
@@ -26,16 +26,16 @@
       (with-bindings {#'utils/*tracer*          tracer
                       #'utils/*memory-exporter* memory-exporter}
         (let [attributes  (gen/generate generators/span-gen)
-              span        (subject/new-span-started tracer attributes)
+              span        (subject/new-started tracer attributes)
               span-as-map (datafy span)]
           (is (match? (:name span-as-map) (:name attributes))))))
     (testing ":parent option "
-      (let [parent-span (subject/new-span-started tracer (assoc (gen/generate generators/span-gen) :parent :none))
+      (let [parent-span (subject/new-started tracer (assoc (gen/generate generators/span-gen) :parent :none))
             attributes  (gen/generate generators/span-gen)
-            span        (subject/new-span-started tracer attributes)
+            span        (subject/new-started tracer attributes)
             span-as-map (datafy span)]
         (println (:parent span-as-map))
-        (is (match? (:nae span-as-map) (:name attributes)))))))
+        (is (match? (:name span-as-map) (:name attributes)))))))
 
 ;; TODO:
 ;; parent: put some context in thread, create :another_span in another context then:

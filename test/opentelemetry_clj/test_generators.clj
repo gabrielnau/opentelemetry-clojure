@@ -1,14 +1,14 @@
 (ns opentelemetry-clj.test-generators
   (:require
     [clojure.datafy :refer [datafy]]
-    [clojure.spec.alpha :as s]
     [clojure.string :as str]
     [clojure.test.check.generators :as gen]
     [opentelemetry-clj.attributes :as attributes]
     [opentelemetry-clj.context :as context]
     [opentelemetry-clj.sdk.datafy]
     [opentelemetry-clj.trace.span :as span])
-  (:import (io.opentelemetry.api.trace TraceFlags TraceState SpanContext)))
+  (:import (io.opentelemetry.api.trace TraceFlags TraceState SpanContext)
+           (io.opentelemetry.api.internal StringUtils)))
 
 ;; General purpose
 
@@ -41,15 +41,18 @@
 
 (def attribute-type-gen (gen/elements attribute-types-list))
 
+(defn AttributeKey-gen [attribute-type]
+  (gen/fmap #(attributes/new-key % attribute-type)
+    (gen/not-empty
+      string-gen)))
+
 (defn attribute-key-gen [attribute-type]
   (gen/such-that
-    #(not (empty? (datafy %)))
+    #(not (str/blank? (datafy %)))
     (gen/one-of
       [(gen/not-empty
          string-gen)
-       (gen/fmap #(attributes/attribute-key % attribute-type)
-         (gen/not-empty
-           string-gen))])))
+       (AttributeKey-gen attribute-type)])))
 
 (defn attribute-value-gen [type]
   (gen/such-that
@@ -69,29 +72,41 @@
       1 1)))                                                ;; FIXME: see the upperbound limit
 
 ;; Baggage
-;; TODO: move to test.check gen ?
 
-(s/def ::non-blank-string (s/and string? (complement str/blank?)))
-(s/def ::value ::non-blank-string)
-(s/def ::metadata ::non-blank-string)
+(def non-empty-printable-string
+  (gen/such-that
+    #(and
+       (not (.isEmpty %))
+       (not (str/blank? %))
+       (StringUtils/isPrintableString %))
+    (gen/not-empty gen/string-ascii)))
 
-(s/def :baggage/arguments
-  (s/map-of
-    ::non-blank-string
-    (s/keys :req-un [::value] :opt-un [::metadata])))
-(s/def :baggage/arguments-without-metadata
-  (s/map-of
-    ::non-blank-string
-    (s/keys :req-un [::value])))
-(s/def :baggage/arguments-with-metadata
-  (s/map-of
-    ::non-blank-string
-    (s/keys :req-un [::value ::metadata])))
+(def baggage-key-gen non-empty-printable-string)
+
+(def baggage-with-metadata-gen
+  (gen/not-empty
+    (gen/map
+      baggage-key-gen
+      (gen/let [value non-empty-printable-string
+                metadata non-empty-printable-string]
+        {:value value :metadata metadata}))))
+
+(def baggage-without-metadata-gen
+  (gen/not-empty
+    (gen/map
+      baggage-key-gen
+      (gen/not-empty
+        (gen/map
+          (gen/return :value)
+          non-empty-printable-string)))))
+
+
+
 
 ;; Context
 
 (defn context-gen []
-  (gen/return (context/root)))
+  (gen/return (context/get-root)))
 
 ;; Span
 

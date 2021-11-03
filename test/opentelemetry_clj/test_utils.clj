@@ -55,7 +55,7 @@
 
 (defn built-span [options]
   (-> (span/new-builder *tracer* options)
-    span/start))
+    span/start!))
 
 (defn closed-span [options]
   (let [span (built-span options)]

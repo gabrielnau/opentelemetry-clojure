@@ -1,6 +1,6 @@
 (ns opentelemetry-clj.trace.span
   "Implements OpenTelemetry [Span](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/api.md#span)."
-  (:require [opentelemetry-clj.attributes :as attribute])
+  (:require [opentelemetry-clj.attributes :as attributes])
   (:import (io.opentelemetry.api.trace SpanBuilder SpanContext SpanKind Tracer Span StatusCode TraceFlags TraceState)
            (io.opentelemetry.context Context)
            (io.opentelemetry.api.common Attributes)
@@ -9,15 +9,6 @@
            (java.util.function BiConsumer)))
 
 (set! *warn-on-reflection* true)
-
-(defn ^:private ^:no-doc add-link
-  ;; SpanContext: https://javadoc.io/doc/io.opentelemetry/opentelemetry-api/latest/io/opentelemetry/api/trace/SpanContext.html
-  ;; -> I don't understand if there is a case where we would be manually building one, I don't think so.
-  ;; Use cases from specification: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/overview.md#links-between-spans
-  ([span-builder span-context]
-   (.addLink ^SpanBuilder span-builder ^SpanContext span-context))
-  ([span-builder span-context attributes]
-   (.addLink ^SpanBuilder span-builder ^SpanContext span-context ^Attributes (attribute/new attributes))))
 
 (def kinds-mapping
   "See [Upstream spec](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/api.md#spankind)."
@@ -28,20 +19,9 @@
    :producer SpanKind/PRODUCER
    :consumer SpanKind/CONSUMER})
 
-(defn ^:private ^:no-doc set-kind
-  "Fallback to SpanKind/INTERNAL if unknown kind provided, following the behavior of the Java implementation."
-  ;; TODO: logs a warning if unknown kind ?
-  [span-builder kind]
-  (let [span-kind (get kinds-mapping kind)]
-    (.setSpanKind ^SpanBuilder span-builder (or span-kind SpanKind/INTERNAL))))
-
-(defn ^:private ^:no-doc set-start-timestamp
-  ([^SpanBuilder span-builder ^Instant start-ts] (.setStartTimestamp span-builder start-ts))
-  ([^SpanBuilder span-builder ^long ts ^TimeUnit unit] (.setStartTimestamp span-builder ts unit)))
-
 (def ^:no-doc no-parent :none)
 
-(defn new-builder
+(defn ^SpanBuilder new-builder
   "Configure a new SpanBuilder. It doesn't start the span, which could be something done at another moment in code execution path.
 
   Arguments:
@@ -50,11 +30,11 @@
   | key         | description |
   | -------------|-------------|
   | `:name` | *Required*, name of the span
-  | `:kind` | Optionnal, see [[set-kind]] for possible values
+  | `:kind` | Optionnal, can be [`:internal` | `:client` | `:server` | `:producer` | `:consumer`], fallbacks to `:internal` if another value given
   | `:parent | Optionnal, if set to `:none`, define span as root span, else provide a `Context` to set as parent. If not set, the value of `Span/current` at the time span is started will be used as parent.
-  | `:links | Optionnal, list of Link ?? FIXME
+  | `:links | Optionnal, list of linked `SpanContext`, in the shape of `{:span-context SpanContext :attributes Attributes}`. see the [specification](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/overview.md#links-between-spans)
   | `:start-ts | Optionnal, explicit start timestamp for the newly created Span. Can either be an `Instant` or a map of `{:ts (long ...) :unit TimeUnit}`.
-  | `:attributes | Optionnal, see [[opentelemetry-clj.attribute/new]]
+  | `:attributes | Optionnal, see [[opentelemetry-clj.attributes/new]]
   "
   [^Tracer tracer opts]
   (let [builder (.spanBuilder ^Tracer tracer ^String (:name opts))]
@@ -62,33 +42,35 @@
       (let [key   (nth opt 0)
             value (nth opt 1)]
         (case key
-          :kind (set-kind builder value)
+          :kind (.setSpanKind ^SpanBuilder builder (get kinds-mapping value SpanKind/INTERNAL)) ;; Fallback to SpanKind/INTERNAL if unknown kind provided, following the behavior of the Java implementation.
           :parent (if (= no-parent value)
                     (.setNoParent ^SpanBuilder builder)
                     (.setParent builder ^Context value))    ;; value must be a Context
-          :links (doseq [link value] (apply add-link (cons builder link)))
+          :links (doseq [link value]
+                   (if (:attributes link)
+                     (.addLink builder ^SpanContext (:span-context link) ^Attributes (attributes/new (:attributes link)))
+                     (.addLink builder ^SpanContext (:span-context link) ^Attributes (attributes/new (:attributes link)))))
           :start-ts (if (instance? Instant value)
-                      (set-start-timestamp builder value)
-                      (set-start-timestamp builder (:ts value) (:unit value)))
-          :attributes (.setAllAttributes ^SpanBuilder builder ^Attributes (attribute/new value))
-          ;; TODO: if given ignored key, emit a log warn once or remove this default and case will break ?
-          :ignored-key)))
+                      (.setStartTimestamp builder ^Instant value)
+                      (.setStartTimestamp builder ^long (:ts value) ^TimeUnit (:unit value)))
+          :attributes (.setAllAttributes builder ^Attributes (attributes/new value))
+          :unknown-key-silently-ignored)))                  ;; Don't break if unknown arg given TODO: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/error-handling.md#basic-error-handling-principles
     builder))
 
-(defn ^Span start
+(defn ^Span start!
   "Returns a Span given a SpanBuilder, set the parent Context and starts the timer."
   [span-builder]
   (.startSpan ^SpanBuilder span-builder))
 
-(defn new-span-started [tracer opts]
+(defn ^Span new-started [tracer opts]
   (-> (new-builder tracer opts)
-    start))
+    start!))
 
 ;; Span interface
 
 (defn end!
   ([^Span span] (.end span))
-  ([^Span span instant] (.end ^Span span ^Instant instant))
+  ([^Span span ^Instant instant] (.end span instant))
   ([^Span span ^long ts ^TimeUnit unit] (.end span ts unit)))
 
 ;; TODO
@@ -115,11 +97,11 @@
         attributes (:attributes opts)]
     (cond
       (and attributes timestamp)
-      (.addEvent ^Span span ^String event-name ^Attributes (attribute/new attributes) ^long (:value timestamp) ^TimeUnit (:unit timestamp))
+      (.addEvent ^Span span ^String event-name ^Attributes (attributes/new attributes) ^long (:value timestamp) ^TimeUnit (:unit timestamp))
       (and attributes instant)
-      (.addEvent ^Span span ^String event-name ^Attributes (attribute/new attributes) ^Instant instant)
+      (.addEvent ^Span span ^String event-name ^Attributes (attributes/new attributes) ^Instant instant)
       attributes
-      (.addEvent ^Span span ^String event-name ^Attributes (attribute/new attributes))
+      (.addEvent ^Span span ^String event-name ^Attributes (attributes/new attributes))
       timestamp
       (.addEvent ^Span span ^String event-name ^long (:value timestamp) ^TimeUnit (:unit timestamp))
       instant
@@ -146,15 +128,15 @@
      (.setStatus ^Span span ^StatusCode s ^String description))))
 
 (defn record-exception
-  ([span exception] (.recordException ^Span span ^Throwable exception))
-  ([span exception attributes] (.recordException ^Span span ^Throwable exception ^Attributes (attribute/new attributes))))
+  ([^Span span ^Throwable exception] (.recordException span exception))
+  ([^Span span ^Throwable exception attributes] (.recordException span exception ^Attributes (attributes/new attributes))))
 
-(defn update-name [span new-name]
-  (.updateName ^Span span ^String new-name))
+(defn update-name [^Span span ^String new-name]
+  (.updateName span new-name))
 
 ;; NOT Context, but SpanContext
-(defn get-span-context [span]
-  (.getSpanContext ^Span span))
+(defn get-span-context [^Span span]
+  (.getSpanContext span))
 
 (defn recording? [span]
   (.isRecording ^Span span))
