@@ -1,12 +1,7 @@
-(ns opentelemetry-clj.attribute
-  "Implements OpenTelemetry [Attribute](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/attribute-naming.md)."
-  (:require [clojure.spec.alpha :as s]
-            [clojure.string :as str]
-            [clojure.spec.gen.alpha :as gen]
-            [clojure.test.check.generators :as gen1])
-  (:import (io.opentelemetry.api.common Attributes AttributeKey)))
-
-; (set! *warn-on-reflection* true)
+(ns opentelemetry-clj.attributes
+  "Implements OpenTelemetry [Attributes](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/attribute-naming.md)."
+  (:import (io.opentelemetry.api.common Attributes AttributeKey AttributeType)
+           (java.util.function BiConsumer)))
 
 (defn string-array
   "Utility function to create a Java String[] from a given list of strings.
@@ -19,7 +14,10 @@
   [items]
   (into-array String items))
 
-(defn ^Attributes attributes
+
+; (set! *warn-on-reflection* true)
+
+(defn ^Attributes new
   "Returns a new instance of `Attributes` from the given key-values pairs in `attributes-map`.
 
   It is recommended to pre-allocate your AttributeKey keys if possible. See [[new-key]].
@@ -37,7 +35,7 @@
       \"org.acme.ab_testing_b\" (boolean false)
       \"org.acme.ab_testing_c\" (long 123)
       \"org.acme.ab_testing_d\" (double 123)
-      \"org.acme.ab_testing_e\" (opentelemetry-clj.attribute/string-array [\"foo\" \"bar\"])
+      \"org.acme.ab_testing_e\" (opentelemetry-clj.attributes/string-array [\"foo\" \"bar\"])
       \"org.acme.ab_testing_f\" (boolean-array [true false])
       \"org.acme.ab_testing_g\" (long-array [123 456])
       \"org.acme.ab_testing_h\" (double-array [123 456])
@@ -47,7 +45,7 @@
       (attribute-key \"org.acme.ab_testing_j\" :boolean) (boolean false)
       (attribute-key \"org.acme.ab_testing_k\" :long) (long 123)
       (attribute-key \"org.acme.ab_testing_l\" :double) (double 123)
-      (attribute-key \"org.acme.ab_testing_m\" :string-array) (opentelemetry-clj.attribute/string-array [\"foo\" \"bar\"])
+      (attribute-key \"org.acme.ab_testing_m\" :string-array) (opentelemetry-clj.attributes/string-array [\"foo\" \"bar\"])
       (attribute-key \"org.acme.ab_testing_n\" :boolean-array) (boolean-array [true false])
       (attribute-key \"org.acme.ab_testing_o\" :long-array) (long-array [123 456])
       (attribute-key \"org.acme.ab_testing_p\" :double-array) (double-array [123 456])
@@ -63,7 +61,7 @@
           (.put builder ^String k (nth a 1)))))
     (.build builder)))
 
-(defn key
+(defn attribute-key
   "Return an AttributeKey instance typed to the expected matching attribute's value.
 
   It is recommended to pre-allocate your AttributeKey keys if possible.
@@ -83,3 +81,23 @@
     :long-array (AttributeKey/longArrayKey ^String key-name)
     :double-array (AttributeKey/doubleArrayKey ^String key-name)))
 
+(def- AttributeType->clojurize-fn
+  {AttributeType/STRING        identity
+   AttributeType/BOOLEAN       identity
+   AttributeType/LONG          identity
+   AttributeType/DOUBLE        identity
+   AttributeType/STRING_ARRAY  (fn [x] (into [] x))
+   AttributeType/BOOLEAN_ARRAY (fn [x] (into [] x))
+   AttributeType/LONG_ARRAY    (fn [x] (into [] x))
+   AttributeType/DOUBLE_ARRAY  (fn [x] (into [] x))})
+
+(defn ->map [attributes]
+  (let [result (transient {})]
+    (.forEach attributes
+      (reify
+        BiConsumer
+        (accept [_ k v]
+          (let [attribute-type     (.getType k)
+                clojurize-value-fn (get AttributeType->clojurize-fn attribute-type)]
+            (assoc! result (.getKey k) (clojurize-value-fn v))))))
+    (persistent! result)))

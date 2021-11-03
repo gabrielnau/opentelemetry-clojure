@@ -1,7 +1,5 @@
 (ns opentelemetry-clj.context
   "Implement OpenTelemetry [Context](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/context/context.md).
-
-
   "
   (:import (io.opentelemetry.context Context ImplicitContextKeyed)
            (java.util.concurrent ExecutorService Executor ScheduledExecutorService)))
@@ -57,10 +55,10 @@
 ;; create span from implicit parent
 ;; create span from explicit parent
 
-(defn current []
+(defn get-current []
   (Context/current))
 
-(defn root []
+(defn get-root []
   (Context/root))
 
 (defn with

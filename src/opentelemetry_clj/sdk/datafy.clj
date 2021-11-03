@@ -8,11 +8,13 @@
   *Warning:* this namespace requires the dependency `io.opentelemetry/opentelemetry-sdk` that should be set manually or available in classpath if using the java agent.
   "
   (:require [clojure.core.protocols :as protocols]
-            [clojure.datafy :refer [datafy]])
+            [clojure.datafy :refer [datafy]]
+            [opentelemetry-clj.baggage :as baggage]
+            [opentelemetry-clj.trace.span :as span]
+            [opentelemetry-clj.attributes :as attribute])
   (:import
-    (io.opentelemetry.api.baggage ImmutableBaggage AutoValue_ImmutableEntry)
+    (io.opentelemetry.api.baggage ImmutableBaggage)
     (io.opentelemetry.api.common Attributes)
-    (io.opentelemetry.api.internal InternalAttributeKeyImpl)
     (io.opentelemetry.api.trace TraceFlags TraceState SpanContext)
     (io.opentelemetry.sdk.common InstrumentationLibraryInfo)
     (io.opentelemetry.sdk.resources AutoValue_Resource Resource)
@@ -39,13 +41,13 @@
 
 (extend-protocol protocols/Datafiable
 
-  InstrumentationLibraryInfo
+  InstrumentationLibraryInfo ;; in SDK
   (datafy [x]
     {:name       (.getName x)
      :version    (.getVersion x)
      :schema-url (.getSchemaUrl x)})
 
-  EventData
+  EventData ;; in SDK
   (datafy [event]
     {:name                     (.getName event)
      :attributes               (map datafy (.getAttributes event))
@@ -54,66 +56,28 @@
      :dropped-attributes-count (.getDroppedAttributesCount event)})
 
   Attributes
-  (datafy [attrs]
-    (let [result (transient {})]
-      (.forEach attrs
-        (reify
-          BiConsumer
-          (accept [_ k v]
-            (assoc! result (.getKey k) (datafy v)))))       ;; datafy value for primitive arrays
-      (persistent! result)))
-
-  InternalAttributeKeyImpl
-  (datafy [k]
-    (.getKey k))
+  (datafy [attrs] (attribute/->map attrs))
 
   TraceFlags
-  (datafy [trace-flags]
-    {:hex      (.asHex trace-flags)
-     :sampled? (.isSampled trace-flags)})
+  (datafy [trace-flags] (span/trace-flags->map trace-flags))
 
   TraceState
-  (datafy [trace-state]
-    (let [a (.asMap trace-state)]                           ;; TODO: forEach
-      (if (.isEmpty a)
-        {}
-        (datafy a))))
+  (datafy [trace-state] (span/trace-state->map trace-state))
 
   SpanContext
-  (datafy [context]
-    {:trace-id    (.getTraceId context)
-     :span-id     (.getSpanId context)
-     :sampled?    (.isSampled context)
-     :trace-flags (datafy (.getTraceFlags context))
-     :trace-state (datafy (.getTraceState context))
-     :valid?      (.isValid context)
-     :remote?     (.isRemote context)})
+  (datafy [span-context] (span/span-context->map span-context))
 
-  AutoValue_Resource
+  AutoValue_Resource ;; in SDK
   (datafy [resource]
-    {:schema-url (.getSchemaUrl resource)
-     :attributes (datafy (.getAttributes resource))})       ;; FIXME
+    (resource/->map resource))
 
-  Resource                                                  ;; not used ? see tests
-  (datafy [r]
-    {:valid?     (.isValid r)
-     :schema-url (.getSchemaUrl r)
-     :version    (.readVersion r)
-     :attributes (datafy (.getAttributes r))})
+  Resource ;; in SDK
+  (datafy [resource] (resource/->map resource))
 
   ImmutableBaggage
-  (datafy [x]
-    (let [as-map (into {} (.asMap x))]
-      (reduce-kv
-        (fn [acc k v] (assoc acc (str k) (datafy v)))
-        {}
-        as-map)))
+  (datafy [x] (baggage/->map x))
 
-  AutoValue_ImmutableEntry
-  (datafy [x]
-    {:value (.getValue x) :metadata (.getValue (.getMetadata x))})
-
-  RecordEventsReadableSpan
+  RecordEventsReadableSpan ;; in SDK
   (datafy [span]
     (let [span-data      (.toSpanData span)
           context        (.getSpanContext span-data)

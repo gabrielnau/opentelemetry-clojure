@@ -1,4 +1,6 @@
-# opentelemetry-clojure
+# opentelemetry-clojure WIP
+
+Status: WIP for the tracing API.
 
 Clojure wrapper of [opentelemetry-java](https://opentelemetry.io/docs/java/).
 
@@ -7,6 +9,7 @@ Goals:
 - minimal overhead over the java implementation, since performance is a [stated goal](https://github.com/open-telemetry/community/blob/main/mission-vision-values.md#we-value-performance) by OpenTelemetry.
 - TODO find upstream OpenTelemetry wording, but basically: say this wrapper can be used by library authors as the upstream java lib expects it. it does so by not including the SDK deps, only the API ones. meaning a clojure lib that instruments its code with opentelemetry-clojure will not forces its users to use opentelemetry at all.
   - OpenTelemetry separates `API` lib from `SDK` lib. Goal is to be able to use `API` code anywhere, but without any `SDK` in classpath it's almost noop.  Thus, libraries can instrument themselves, without forcing their consumers to use OpenTelemetry.
+- Keep the original naming of things, like Context, Resource, Baggage, Span, etc.
 
 Non-goals:
 - provide opinionated solution concerning in-process context propagation between threads, instead provide several solutions and document their caveats.
@@ -104,8 +107,16 @@ OTEL documentation:
 - Recommendations for app devs: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/attribute-naming.md#recommendations-for-application-developers
 - Naming: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/attribute-naming.md
 - Spec: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/common.md#attributes
+- Limits behavior + configuration: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/common.md#attribute-limits-configuration
+
+
+- semconv artifact -> https://javadoc.io/doc/io.opentelemetry/opentelemetry-semconv/latest/io/opentelemetry/semconv/trace/attributes/SemanticAttributes.html
+ -> resources attributes: https://javadoc.io/doc/io.opentelemetry/opentelemetry-semconv/latest/io/opentelemetry/semconv/resource/attributes/ResourceAttributes.html
 
 - They can be attached to a Resource, Span, span Event, span Exception,  
+- why typed ?
+  > this type-safety is specifically to support tracing backends that have typed attributes/tags (like Jaeger). OTLP also has this built in to the model.
+  source: https://cloud-native.slack.com/archives/C014L2KCTE3/p1634928183008800?thread_ts=1634889110.007100&cid=C014L2KCTE3
 
 Implementation choice:
 - Because of the Java class we have to implement, we have to declare the attribute's value type
@@ -120,6 +131,17 @@ Implementation choice:
   - if service.name not set, "unknown_service:java"
   - doc and advise: https://opentelemetry.lightstep.com/go/tracing/
   - spec: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/resource/sdk.md#detecting-resource-information-from-the-environment
+
+### Baggage
+
+- link to spec https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/baggage/api.md
+- metadata field:
+  > Metadata Optional metadata associated with the name-value pair. This should be an opaque wrapper for a string with no semantic meaning. Left opaque to allow for future functionality.
+
+Operations:
+- Extract the Baggage from a Context instance
+- Insert the Baggage to a Context instance
+
 
 ### Datafy 
 
@@ -157,15 +179,11 @@ We have to differentiate 2 use cases:
  
 - Kaocha: -Dclojure.compile.warn-on-reflection=true ?
 - Tracing: 
-  - Implement Bagage ~= attributes shared by spans
-    - idea: implement custom version where all immutability things are removed since we are in clojure land already
-    - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/overview.md#baggage-signal
-    - https://docs.honeycomb.io/getting-data-in/java/opentelemetry-distro/#multi-span-attributes
-    - BaggageSpanProcessor: ?
   - Leverage manual instrumented libraries without the agent:
     - example: https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/instrumentation/okhttp/okhttp-3.0/library
     - it could be a good solution to avoid the agent pitfalls while leveraging instrumented libs like jetty, jdbc etc
   - Review naming conventions
+    - elements of clojure
     - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/resource/semantic_conventions/README.md
     - decide on how to name the builder functions which have a side effect (mutate span builder state)w
   - Logger configuration
@@ -177,8 +195,11 @@ We have to differentiate 2 use cases:
       - http://logback.qos.ch/manual/mdc.html
     - https://github.com/newrelic/newrelic-opentelemetry-examples/tree/main/java/logs-in-context-log4j2
     - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/error-handling.md#java
+    - https://cloud-native.slack.com/archives/C0150QF88FL/p1635258042025900
   - reducers not supported: add in documentation + explore if possible to change that
+  - is semconv package easy to use ? if not, wrapper
   - Testing :
+    - Span, Resource 
     - use this: "We provide a debug mechanism for context propagation, which can be enabled by
     setting {@code -Dio.opentelemetry.context.enableStrictContext=true} in your JVM args. This will
     enable a strict checker that makes sure that {@link Scope}s are closed on the correct thread and
@@ -189,20 +210,15 @@ We have to differentiate 2 use cases:
     a multi-tenant system)."
     - use clojure.spec to generate fake data to test span builder, everything in global sdk setup
     - property based testing for e2e tests
-      - see https://clojure.org/guides/test_check_beginner
     - integration testing
       - validate with a javaagent, for example: Netty (autoinstrumented) -> Aleph (manual) -> App code (manual) -> JDBC (auto)
-      - https://github.com/BrunoBonacci/mulog/issues/52
+      - https://github.com/javahippie/clj-test-containers
   - Performance:
-    ~~- why `Context.wrap` doesn't close the `Scope` ?~~ 
     - get a Yourkit licence for open source project: https://www.yourkit.com/java/profiler/purchase/#os_license
-    - warn on reflection
-      - https://clojure.org/reference/java_interop#optimization
-    - for some functions, if I provide an easy-to-use but with reflection, then I must also provide a more Java-ish version but without reflection (when perf is required) -> Span attributes
-    ~~- with-bindings vs binding -> perf difference ? TODO: check with criterium~~
+    - https://clojure.org/reference/java_interop#optimization
     - profile the code and try in https://github.com/bsless/stress-server project maybe, to have a good stress test ?
       - at least find a way to run a long time a stress test to validate there is no leaks -> it might be possible to test it even after a triggered GC event ?
-    - try to make decision on implementation:
+    - micro bench:
       - https://github.com/hugoduncan/criterium
       - https://github.com/jgpc42/jmh-clojure
     - could be interesting to check https://github.com/jetty-project/jetty-load-generator
@@ -213,11 +229,6 @@ We have to differentiate 2 use cases:
       - configure reitit properly (see stress server results)
       - use BatchSpanProcessor !
   - clj linter ? https://github.com/clj-kondo/clj-kondo
-  
-  - Attributes limits: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/common.md#attribute-limits
-    - explore this API and how it behaves
-  - opentelemetry-clj.attribute: implement an attribute key "store" to easily allow end users to preallocate them
-     - attribute key preallocation with weak map support, see keywords implementation: https://github.com/clojure/clojure/blob/clojure-1.10.1/src/jvm/clojure/lang/Keyword.java#L32
   - Documentation
     - cljdoc https://github.com/cljdoc/cljdoc/blob/master/doc/userguide/for-library-authors.adoc
     - Docs: https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/docs
@@ -235,12 +246,16 @@ We have to differentiate 2 use cases:
     - document each version requiring which Sdk
     - code 2 gif is needed to explain context propagation: https://github.com/phronmophobic/clj-media
     - "context object follows execution path of your code"
+    - clojure min version => 1.9.0 for clojure spec ? TODO: test with this version
   - review library guidelines https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/library-guidelines.md
   - see if that makes sense to provide a namespace for Component version with clean shutdown, same for integrant
     -> could be a separate lib then
     - see graceful shutdown https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#shutdown
   - Review all TODO
   - page 454 clojure cookbook: verifiying java interop with core.typed ? can it bring anything else than the warn on reflection ?
+  - sort requires
+- opentelemetry-clojure-component
+- opentelemetry-clojure-integrant
 - Metrics
   - start to explore the Java doc, even if its still alpha
   - conventions: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/metrics/semantic_conventions/README.md
@@ -255,6 +270,5 @@ We have to differentiate 2 use cases:
   - versionning: clojuresque but see if we incr 0.X.0 each time we bump sdk dependency in order to allow for patches for older versions ? 
 - Bookmarks:
   - Programmatic injection of agent https://cloud-native.slack.com/archives/C0150QF88FL/p1632249888088300?thread_ts=1631980158.059400&cid=C0150QF88FL
-  
-To ask on CNCF Slack:
-- what is the logic of attribute key type in comparison
+- Ideas:
+  - Span: option to validate options are consistent ? could be used during test / staging

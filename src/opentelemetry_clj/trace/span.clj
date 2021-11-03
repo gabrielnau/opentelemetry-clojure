@@ -1,11 +1,12 @@
 (ns opentelemetry-clj.trace.span
   "Implements OpenTelemetry [Span](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/api.md#span)."
-  (:require [opentelemetry-clj.attribute :as attribute])
-  (:import (io.opentelemetry.api.trace SpanBuilder SpanContext SpanKind Tracer Span StatusCode)
+  (:require [opentelemetry-clj.attributes :as attribute])
+  (:import (io.opentelemetry.api.trace SpanBuilder SpanContext SpanKind Tracer Span StatusCode TraceFlags TraceState)
            (io.opentelemetry.context Context)
            (io.opentelemetry.api.common Attributes)
            (java.util.concurrent TimeUnit)
-           (java.time Instant)))
+           (java.time Instant)
+           (java.util.function BiConsumer)))
 
 (set! *warn-on-reflection* true)
 
@@ -16,7 +17,7 @@
   ([span-builder span-context]
    (.addLink ^SpanBuilder span-builder ^SpanContext span-context))
   ([span-builder span-context attributes]
-   (.addLink ^SpanBuilder span-builder ^SpanContext span-context ^Attributes (attribute/attributes attributes))))
+   (.addLink ^SpanBuilder span-builder ^SpanContext span-context ^Attributes (attribute/new attributes))))
 
 (def kinds-mapping
   "See [Upstream spec](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/api.md#spankind)."
@@ -28,10 +29,10 @@
    :consumer SpanKind/CONSUMER})
 
 (defn ^:private ^:no-doc set-kind
-  "Fallback to SpanKind/INTERNAL if unknown kind provided, following the behavior of the original implementation which always fallbacks to INTERNAL."
+  "Fallback to SpanKind/INTERNAL if unknown kind provided, following the behavior of the Java implementation."
+  ;; TODO: logs a warning if unknown kind ?
   [span-builder kind]
   (let [span-kind (get kinds-mapping kind)]
-    ;; TODO: logs a warning if unknown kind ?
     (.setSpanKind ^SpanBuilder span-builder (or span-kind SpanKind/INTERNAL))))
 
 (defn ^:private ^:no-doc set-start-timestamp
@@ -69,7 +70,7 @@
           :start-ts (if (instance? Instant value)
                       (set-start-timestamp builder value)
                       (set-start-timestamp builder (:ts value) (:unit value)))
-          :attributes (.setAllAttributes ^SpanBuilder builder ^Attributes (attribute/attributes value))
+          :attributes (.setAllAttributes ^SpanBuilder builder ^Attributes (attribute/new value))
           ;; TODO: if given ignored key, emit a log warn once or remove this default and case will break ?
           :ignored-key)))
     builder))
@@ -109,16 +110,16 @@
   "
   [span opts]
   (let [event-name (:name opts)
-        instant (:at-instant opts)
-        timestamp (:at-timestamp opts)
+        instant    (:at-instant opts)
+        timestamp  (:at-timestamp opts)
         attributes (:attributes opts)]
     (cond
       (and attributes timestamp)
-      (.addEvent ^Span span ^String event-name ^Attributes (attribute/attributes attributes) ^long (:value timestamp) ^TimeUnit (:unit timestamp))
+      (.addEvent ^Span span ^String event-name ^Attributes (attribute/new attributes) ^long (:value timestamp) ^TimeUnit (:unit timestamp))
       (and attributes instant)
-      (.addEvent ^Span span ^String event-name ^Attributes (attribute/attributes attributes) ^Instant instant)
+      (.addEvent ^Span span ^String event-name ^Attributes (attribute/new attributes) ^Instant instant)
       attributes
-      (.addEvent ^Span span ^String event-name ^Attributes (attribute/attributes attributes))
+      (.addEvent ^Span span ^String event-name ^Attributes (attribute/new attributes))
       timestamp
       (.addEvent ^Span span ^String event-name ^long (:value timestamp) ^TimeUnit (:unit timestamp))
       instant
@@ -146,7 +147,7 @@
 
 (defn record-exception
   ([span exception] (.recordException ^Span span ^Throwable exception))
-  ([span exception attributes] (.recordException ^Span span ^Throwable exception ^Attributes (attribute/attributes attributes))))
+  ([span exception attributes] (.recordException ^Span span ^Throwable exception ^Attributes (attribute/new attributes))))
 
 (defn update-name [span new-name]
   (.updateName ^Span span ^String new-name))
@@ -157,6 +158,29 @@
 
 (defn recording? [span]
   (.isRecording ^Span span))
+
+(defn trace-flags->map [^TraceFlags trace-flags]
+  {:hex      (.asHex trace-flags)
+   :sampled? (.isSampled trace-flags)})
+
+(defn trace-state->map [^TraceState trace-state]
+  (let [result (transient {})]
+    (.forEach trace-state
+      (reify
+        BiConsumer
+        (accept [_ k v]
+          (assoc! result k v))))
+    (persistent! result)))
+
+(defn span-context->map
+  [^SpanContext span-context]
+  {:trace-id    (.getTraceId span-context)
+   :span-id     (.getSpanId span-context)
+   :sampled?    (.isSampled span-context)
+   :valid?      (.isValid span-context)
+   :remote?     (.isRemote span-context)
+   :trace-flags (trace-flags->map (.getTraceFlags span-context))
+   :trace-state (trace-state->map (.getTraceState span-context))})
 
 ;; storeInContext
 (comment

@@ -5,7 +5,7 @@
 
   *Warning:* this namespace requires the dependency `io.opentelemetry/opentelemetry-sdk` that should be set manually or available in classpath if using the java agent.
   "
-  (:require [opentelemetry-clj.attribute :as attribute])
+  (:require [opentelemetry-clj.attributes :as attribute])
   (:import (io.opentelemetry.sdk.resources Resource)
            (io.opentelemetry.api.common Attributes)))
 
@@ -17,7 +17,13 @@
   Arguments:
   - `attributes`: Map of attributes, see [[opentelemetry-clj.attribute/new]]
   - `schema-url`: Optionnal, a string"
-  ([attributes] (Resource/create ^Attributes (attribute/attributes attributes)))
-  ([attributes schema-url] (Resource/create ^Attributes (attribute/attributes attributes) ^String schema-url)))
+  ([attributes] (Resource/create ^Attributes (attribute/new attributes)))
+  ([attributes schema-url] (Resource/create ^Attributes (attribute/new attributes) ^String schema-url)))
+
+(defn ->map [resource]
+  {:valid?     (.isValid resource)
+   :schema-url (.getSchemaUrl resource)
+   :version    (.readVersion resource)
+   :attributes (attribute/->map (.getAttributes resource))})
 
 ;;FIXME: incomplete API, should handle merge etc

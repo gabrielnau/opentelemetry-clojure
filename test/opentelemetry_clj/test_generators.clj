@@ -4,7 +4,7 @@
     [clojure.spec.alpha :as s]
     [clojure.string :as str]
     [clojure.test.check.generators :as gen]
-    [opentelemetry-clj.attribute :as attribute]
+    [opentelemetry-clj.attributes :as attributes]
     [opentelemetry-clj.context :as context]
     [opentelemetry-clj.sdk.datafy]
     [opentelemetry-clj.trace.span :as span])
@@ -32,7 +32,7 @@
    :boolean       gen/boolean
    :long          gen/large-integer
    :double        simple-double
-   :string-array  (gen/fmap attribute/string-array (gen/vector string-gen 1 10))
+   :string-array  (gen/fmap attributes/string-array (gen/vector string-gen 1 10))
    :boolean-array (gen/fmap boolean-array (gen/vector gen/boolean 1 10))
    :long-array    (gen/fmap long-array (gen/vector gen/large-integer 1 50))
    :double-array  (gen/fmap long-array (gen/vector simple-double 1 50))})
@@ -47,7 +47,7 @@
     (gen/one-of
       [(gen/not-empty
          string-gen)
-       (gen/fmap #(attribute/key % attribute-type)
+       (gen/fmap #(attributes/attribute-key % attribute-type)
          (gen/not-empty
            string-gen))])))
 

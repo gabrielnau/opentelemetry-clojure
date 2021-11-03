@@ -1,4 +1,4 @@
-(ns opentelemetry-clj.attribute-test
+(ns opentelemetry-clj.attributes-test
   (:require
     [clojure.datafy :refer [datafy]]
     [clojure.string :as str]
@@ -7,7 +7,7 @@
     [clojure.test.check.properties :as prop]
     [matcher-combinators.matchers :as m]
     [matcher-combinators.test]
-    [opentelemetry-clj.attribute :as subject]
+    [opentelemetry-clj.attributes :as subject]
     [opentelemetry-clj.test-generators :as generators]
     [opentelemetry-clj.sdk.datafy]
     [opentelemetry-clj.test-utils :as test-utils])
@@ -27,7 +27,7 @@
       100
       (prop/for-all [key generators/string-gen
                      type generators/attribute-type-gen]
-        (let [result (subject/key key type)]
+        (let [result (subject/attribute-key key type)]
           (is (instance? AttributeKey result))
           (is (= key (.getKey result)))
           (is (= type (AttributeType->keyword (.getType result)))))))))
@@ -39,7 +39,7 @@
     (test-check/quick-check
       10
       (prop/for-all [args generators/attributes-gen]
-        (let [result        (subject/attributes args)
+        (let [result        (subject/new args)
               result-as-map (datafy result)
               args-as-map   (test-utils/attribute-arguments->map args)]
           (is (instance? Attributes result))

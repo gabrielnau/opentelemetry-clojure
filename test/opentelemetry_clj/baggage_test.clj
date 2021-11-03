@@ -16,8 +16,8 @@
   (let [args (gen/generate (s/gen :baggage/arguments))
         baggage (subject/new-baggage args)
         [some-key some-val] (first args)]
-    (is (= nil (subject/get-key baggage "non-existent-key")))
-    (is (= (:value some-val) (subject/get-key baggage some-key)))))
+    (is (= nil (subject/get baggage "non-existent-key")))
+    (is (= (:value some-val) (subject/get baggage some-key)))))
 
 (deftest size
   (test-check/quick-check

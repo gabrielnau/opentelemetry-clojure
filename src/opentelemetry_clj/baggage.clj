@@ -1,7 +1,9 @@
 (ns opentelemetry-clj.baggage
   "Implements OpenTelemetry [Baggage](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/overview.md#baggage-signal) (complete specification [here](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/baggage/api.md))."
-  (:import (io.opentelemetry.api.baggage Baggage BaggageBuilder BaggageEntryMetadata)
-           (io.opentelemetry.context Context)))
+  (:refer-clojure :exclude [get])
+  (:import (io.opentelemetry.api.baggage Baggage BaggageBuilder BaggageEntryMetadata BaggageEntry)
+           (io.opentelemetry.context Context)
+           (java.util.function BiConsumer)))
 
 (set! *warn-on-reflection* true)
 
@@ -18,6 +20,7 @@
   - `values`: a map of key / values, with keys as strings and values as:
   | key         | description |
   | -------------|-------------|
+
   | `:value` | Value of the given `key`
   | `:metadata` | Optionnal, This field is specified as having \"no semantic meaning. Left opaque to allow for future functionality.\" in the [specification](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/baggage/api.md).
 
@@ -48,21 +51,13 @@
     .build))
 
 ;; TODO: better naming
+;; TODO: duplicate ?
 (defn with-values
   "Given an already built `baggage`, returns a new Baggage instance with added (or overriden) values"
   [baggage kvs]
   (let [builder (.toBuilder ^Baggage baggage)]
     (-> ^BaggageBuilder (put-values builder kvs)
        .build)))
-
-(defn get-key
-  "Returns the given Baggage's key, or nil if it doesn't exist.
-
-  Arguments:
-  - `baggage`: instance of `Baggage`
-  - `key`: a string"
-  [baggage key]
-  (.getEntryValue ^Baggage baggage ^String key))
 
 (defn is-empty
   "Returns wether the given `baggage` is empty or not."
@@ -74,11 +69,35 @@
   [baggage]
   (.size ^Baggage baggage))
 
-(defn get-from-implicit-context []
+(defn from-implicit-context []
   (Baggage/current))
 
-(defn get-from-explicit-context [context]
+(defn from-explicit-context [context]
   (Baggage/fromContext ^Context context))
 
-(defn ^Context set-in-context [baggage context]
+(defn ^Context set-in-context! [baggage context]
   (.storeInContext ^Baggage baggage ^Context context))
+
+(defn ->map
+  "Returns a map from given Baggage keys and values."
+  [baggage]
+  (let [result (transient {})]
+    (.forEach ^Baggage baggage
+      (reify
+        BiConsumer
+        (accept [_ k v]
+          (assoc! result k {:value    (.getValue ^BaggageEntry v)
+                            :metadata (-> (.getMetadata ^BaggageEntry v)
+                                        .getValue)}))))
+    (persistent! result)))
+
+
+
+(defn get
+  "Returns Baggage's value at key, or nil if it doesn't exist.
+
+  Arguments:
+  - `baggage`: instance of `Baggage`
+  - `k`: the baggage key, a string"
+  [baggage k]
+  (.getEntryValue ^Baggage baggage ^String k))
