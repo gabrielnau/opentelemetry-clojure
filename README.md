@@ -36,6 +36,13 @@ bin/kaocha
 
 ## Documentation (WIP, unstructured)
 
+### Span
+
+- kind: list of possible kinds, if not good one fallback on internal, following Java implementation
+- usage to build a spanbuilder and start it elsewhere
+
+
+
 ### Get a tracer instance
 
 First, you need an instance of OpenTelemetrySdk:
@@ -176,16 +183,13 @@ We have to differentiate 2 use cases:
 5. Load test example app with correctness validation (convey trace id in the request body to assert down the execution path correct spans) + Profiling, etc 
 
 ## TODO :
- 
-- Kaocha: -Dclojure.compile.warn-on-reflection=true ?
-- Tracing: 
+
+- Tracing:
+  - Review naming conventions
+    - decide on how to name the builder functions which have a side effect (mutate span builder state)
   - Leverage manual instrumented libraries without the agent:
     - example: https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/instrumentation/okhttp/okhttp-3.0/library
     - it could be a good solution to avoid the agent pitfalls while leveraging instrumented libs like jetty, jdbc etc
-  - Review naming conventions
-    - elements of clojure
-    - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/resource/semantic_conventions/README.md
-    - decide on how to name the builder functions which have a side effect (mutate span builder state)w
   - Logger configuration
     - https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/instrumentation/logback-1.0/library
     - https://opentelemetry.io/docs/java/manual_instrumentation/#logging-and-error-handling
@@ -196,25 +200,14 @@ We have to differentiate 2 use cases:
     - https://github.com/newrelic/newrelic-opentelemetry-examples/tree/main/java/logs-in-context-log4j2
     - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/error-handling.md#java
     - https://cloud-native.slack.com/archives/C0150QF88FL/p1635258042025900
-  - reducers not supported: add in documentation + explore if possible to change that
-  - is semconv package easy to use ? if not, wrapper
   - Testing :
-    - Span, Resource 
-    - use this: "We provide a debug mechanism for context propagation, which can be enabled by
-    setting {@code -Dio.opentelemetry.context.enableStrictContext=true} in your JVM args. This will
-    enable a strict checker that makes sure that {@link Scope}s are closed on the correct thread and
-    that they are not garbage collected before being closed. This is done with some relatively
-    expensive stack trace walking. It is highly recommended to enable this in unit tests and staging
-    environments, and you may consider enabling it in production if you have the CPU budget or have
-    very strict requirements on context being propagated correctly (i.e., because you use context in
-    a multi-tenant system)."
-    - use clojure.spec to generate fake data to test span builder, everything in global sdk setup
+    - Span 
     - property based testing for e2e tests
     - integration testing
       - validate with a javaagent, for example: Netty (autoinstrumented) -> Aleph (manual) -> App code (manual) -> JDBC (auto)
       - https://github.com/javahippie/clj-test-containers
+      - -Dio.opentelemetry.context.enableStrictContext=true
   - Performance:
-    - get a Yourkit licence for open source project: https://www.yourkit.com/java/profiler/purchase/#os_license
     - https://clojure.org/reference/java_interop#optimization
     - profile the code and try in https://github.com/bsless/stress-server project maybe, to have a good stress test ?
       - at least find a way to run a long time a stress test to validate there is no leaks -> it might be possible to test it even after a triggered GC event ?
@@ -228,47 +221,56 @@ We have to differentiate 2 use cases:
     - Load testing:
       - configure reitit properly (see stress server results)
       - use BatchSpanProcessor !
-  - clj linter ? https://github.com/clj-kondo/clj-kondo
+  - clj linter https://github.com/clj-kondo/clj-kondo
   - Documentation
+    - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/resource/semantic_conventions/README.md
     - cljdoc https://github.com/cljdoc/cljdoc/blob/master/doc/userguide/for-library-authors.adoc
     - Docs: https://github.com/open-telemetry/opentelemetry-java-instrumentation/tree/main/docs
     - [Introduction to OpenTelemetry](https://www.youtube.com/watch?v=_OXYCzwFd1Y)
     - should use the BOM but can't: https://clojure.atlassian.net/browse/TDEPS-202 ```clj -Stree '{:deps {io.opentelemetry/opentelemetry-bom {:mvn/version "1.7.0" :extension "pom"}}}'```
     - Propagator W3C: async and sync Ring middleware implementation
-      - check semantic conventions
-        - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/semantic_conventions/http.md
-        - https://github.com/open-telemetry/opentelemetry-java-instrumentation/blob/main/docs/semantic-conventions.md
-        - https://github.com/open-telemetry/opentelemetry-specification/tree/main/specification/trace/semantic_conventions
-      - Note about: span per retry in http query https://neskazu.medium.com/thoughts-on-http-instrumentation-with-opentelemetry-9fc22fa35bc7 + So for the sake of consistency and to give users better observability, I believe each redirect should be a separate HTTP span.
-      - middleware will be in hot path, really needs to be as performant as possible
+    - check semantic conventions
+      - https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/semantic_conventions/http.md
+      - https://github.com/open-telemetry/opentelemetry-java-instrumentation/blob/main/docs/semantic-conventions.md
+      - https://github.com/open-telemetry/opentelemetry-specification/tree/main/specification/trace/semantic_conventions
+    - Note about: span per retry in http query https://neskazu.medium.com/thoughts-on-http-instrumentation-with-opentelemetry-9fc22fa35bc7 + So for the sake of consistency and to give users better observability, I believe each redirect should be a separate HTTP span.
+    - middleware will be in hot path, really needs to be as performant as possible
     - auto configuration https://github.com/open-telemetry/opentelemetry-java/tree/main/sdk-extensions/autoconfigure
     - supported underlying lib
     - document each version requiring which Sdk
     - code 2 gif is needed to explain context propagation: https://github.com/phronmophobic/clj-media
     - "context object follows execution path of your code"
     - clojure min version => 1.9.0 for clojure spec ? TODO: test with this version
+    - reducers not supported: add in documentation + explore if possible to change that
   - review library guidelines https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/library-guidelines.md
-  - see if that makes sense to provide a namespace for Component version with clean shutdown, same for integrant
-    -> could be a separate lib then
-    - see graceful shutdown https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#shutdown
   - Review all TODO
   - page 454 clojure cookbook: verifiying java interop with core.typed ? can it bring anything else than the warn on reflection ?
   - sort requires
+- Baggage: implement a merge like function using `Baggage#toBuilder`.
 - opentelemetry-clojure-component
+  - see graceful shutdown https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#shutdown
 - opentelemetry-clojure-integrant
+- is semconv package easy to use ? if not, wrapper
 - Metrics
   - start to explore the Java doc, even if its still alpha
   - conventions: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/metrics/semantic_conventions/README.md
   - Interesting Datadog issue with cumulative vs delta: https://cloud-native.slack.com/archives/C0150QF88FL/p1633960889159200
+- Logs
+  - https://cloud-native.slack.com/archives/C014L2KCTE3/p1635793311036800
 - Release as a clojure lib:
+  - review docstrings
   - don't depend on latest clojure ? 
   - check for build, CI for open source
   - how to publish to clojars
   - how to publish to maven central
   - https://keepachangelog.com/en/1.0.0/
   - see clojurians announcements and tracing channels to gather feedback + https://clojureverse.org/c/showcase/your-projects-and-libraries/35
-  - versionning: clojuresque but see if we incr 0.X.0 each time we bump sdk dependency in order to allow for patches for older versions ? 
+  - versionning: clojuresque but see if we incr 0.X.0 each time we bump sdk dependency in order to allow for patches for older versions ?
+  - get a Yourkit licence for open source project: https://www.yourkit.com/java/profiler/purchase/#os_license
 - Bookmarks:
   - Programmatic injection of agent https://cloud-native.slack.com/archives/C0150QF88FL/p1632249888088300?thread_ts=1631980158.059400&cid=C0150QF88FL
 - Ideas:
   - Span: option to validate options are consistent ? could be used during test / staging
+  - Baggage: implement some Clojure interfaces (count, empty, merge), semantics are close to a map
+  - Attributes: same
+  - Implement a clojure Tap Exporter ?
