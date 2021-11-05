@@ -4,7 +4,6 @@
             [matcher-combinators.matchers :as m]
             [clojure.test.check :as test-check]
             [clojure.test.check.properties :as prop]
-            [clojure.spec.alpha :as s]
             [clojure.spec.gen.alpha :as gen]
             [clojure.datafy :refer [datafy]]
             [opentelemetry-clj.sdk.datafy]
@@ -13,7 +12,7 @@
   (:import (io.opentelemetry.api.baggage Baggage)))
 
 (deftest get-fn
-  (let [args    (gen/generate (s/gen :baggage/arguments))
+  (let [args    (gen/generate generators/baggage-without-metadata-gen)
         baggage (subject/new args)
         [some-key some-val] (first args)]
     (is (= nil (subject/get baggage "non-existent-key")))
@@ -22,17 +21,16 @@
 (deftest count-fn
   (test-check/quick-check
     10
-    (prop/for-all [args (s/gen :baggage/arguments)]
+    (prop/for-all [args generators/baggage-without-metadata-gen]
       (let [baggage (subject/new args)]
         (is (= (subject/count baggage)
               (count (keys args))))))))
 
-(deftest is-empty-fn
+(deftest empty?-fn
   (let [empty-baggage     (Baggage/empty)
-        not-empty-baggage (subject/new (gen/generate
-                                         (gen/not-empty (s/gen :baggage/arguments))))]
-    (is (subject/is-empty empty-baggage))
-    (is (not (subject/is-empty not-empty-baggage)))))
+        not-empty-baggage (subject/new (gen/generate generators/baggage-without-metadata-gen))]
+    (is (subject/empty? empty-baggage))
+    (is (not (subject/empty? not-empty-baggage)))))
 
 (deftest new-fn
   (testing "without metadata"

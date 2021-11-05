@@ -47,7 +47,7 @@
     ^BaggageBuilder (set-values values)
     .build))
 
-(defn is-empty
+(defn empty?
   "Returns wether the given `baggage` is empty or not."
   [^Baggage baggage]
   (.isEmpty baggage))
