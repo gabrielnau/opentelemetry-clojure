@@ -1,6 +1,6 @@
 (ns opentelemetry-clj.baggage
   "Implements OpenTelemetry [Baggage](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/overview.md#baggage-signal) (complete specification [here](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/baggage/api.md))."
-  (:refer-clojure :exclude [get count merge])
+  (:refer-clojure :exclude [get count merge empty?])
   (:import (io.opentelemetry.api.baggage Baggage BaggageBuilder BaggageEntryMetadata BaggageEntry)
            (io.opentelemetry.context Context)
            (java.util.function BiConsumer)))
