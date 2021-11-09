@@ -22,7 +22,7 @@
             (m/match-with [map? m/equals] (:attributes result-as-map))
             attributes-as-map))))
   (testing "builds a Resource with attributes and schema url"
-    (let [some-schema-url   (gen/generate generators/string-gen)
+    (let [some-schema-url   (gen/generate generators/non-empty-printable-string)
           attributes        (gen/generate generators/attributes-gen)
           result-as-map     (-> (subject/new {:attributes attributes :schema-url some-schema-url}) datafy)
           attributes-as-map (test-utils/attribute-arguments->map attributes)]

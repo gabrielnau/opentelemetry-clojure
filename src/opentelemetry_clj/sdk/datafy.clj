@@ -16,7 +16,7 @@
     [opentelemetry-clj.attributes :as attributes])
   (:import
     (io.opentelemetry.api.baggage ImmutableBaggage)
-    (io.opentelemetry.api.common Attributes AttributeKey)
+    (io.opentelemetry.api.common Attributes AttributeKey ArrayBackedAttributes)
     (io.opentelemetry.api.trace TraceFlags TraceState SpanContext)
     (io.opentelemetry.sdk.common InstrumentationLibraryInfo)
     (io.opentelemetry.sdk.resources AutoValue_Resource Resource)
@@ -27,19 +27,19 @@
 ;; Primitive arrays, see https://clojure.atlassian.net/browse/CLJ-1381
 (extend-protocol protocols/Datafiable
   (Class/forName "[Ljava.lang.String;")                     ;; String[]
-  (datafy [x] (into [] x)))
+  (datafy [x] (vec x)))
 
 (extend-protocol protocols/Datafiable
   (Class/forName "[Z")                                      ;; Boolean[]
-  (datafy [x] (into [] x)))
+  (datafy [x] (vec x)))
 
 (extend-protocol protocols/Datafiable
   (Class/forName "[J")                                      ;; Long[]
-  (datafy [x] (into [] x)))
+  (datafy [x] (vec x)))
 
 (extend-protocol protocols/Datafiable
   (Class/forName "[D")                                      ;; Double[]
-  (datafy [x] (into [] x)))
+  (datafy [x] (vec x)))
 
 (extend-protocol protocols/Datafiable
 
@@ -52,7 +52,7 @@
   EventData                                                 ;; in SDK
   (datafy [event]
     {:name                     (.getName event)
-     :attributes               (map datafy (.getAttributes event))
+     :attributes               (-> event .getAttributes attributes/->map)
      :epoch-nanos              (.getEpochNanos event)
      :attributes-count         (.getTotalAttributeCount event)
      :dropped-attributes-count (.getDroppedAttributesCount event)})
@@ -61,6 +61,9 @@
   (datafy [k] ^String (.getKey k))
 
   Attributes
+  (datafy [attrs] (attributes/->map attrs))
+
+  ArrayBackedAttributes
   (datafy [attrs] (attributes/->map attrs))
 
   TraceFlags
@@ -72,9 +75,9 @@
   SpanContext
   (datafy [span-context] (span/span-context->map span-context))
 
+  ;; FIXME: autovalue_resource or resource ?
   AutoValue_Resource                                        ;; in SDK
-  (datafy [resource]
-    (resource/->map resource))
+  (datafy [resource] (resource/->map resource))
 
   Resource                                                  ;; in SDK
   (datafy [resource] (resource/->map resource))
@@ -82,30 +85,31 @@
   ImmutableBaggage
   (datafy [x] (baggage/->map x))
 
+  SpanContext
+  (datafy [x] (span/span-context->map x))
+
   RecordEventsReadableSpan                                  ;; in SDK
   (datafy [span]
     (let [span-data      (.toSpanData span)
-          context        (.getSpanContext span-data)
+          span-context   (.getSpanContext span-data)
           parent-context (.getParentSpanContext span-data)]
       ;; todo: display parent-context if present, else display none
-      {:name                    (.getName span-data)
-       :trace-id                (.getTraceId context)
-       :span-id                 (.getSpanId context)
-       :kind                    (str (.getKind span-data))
-       :parent-context          (datafy parent-context)
-       :context                 (datafy context)
-       :attributes              (datafy (.getAttributes span-data))
-       :resource                (datafy (.getResource span-data))
-       :status                  (-> (.getStatus span-data) .getStatusCode str)
-       :recording?              (.isRecording span)
-       :ended?                  (.hasEnded span-data)
-       :links                   (->> (.getLinks span-data) (into []))
-       :events                  (->> (.getEvents span-data)
-                                  (map datafy))
-       :stats                   {:attributes-count (.getTotalAttributeCount span-data)
-                                 :links-count      (.getTotalRecordedLinks span-data)
-                                 :events-count     (.getTotalRecordedEvents span-data)}
-       :timestamps              {:start-epoch-nanos (.getStartEpochNanos span-data)
-                                 :end-epoch-nanos   (.getEndEpochNanos span-data)
-                                 :latency           (.getLatencyNanos span)}
-       :instrumentation-library (datafy (.getInstrumentationLibraryInfo span-data))})))
+      (merge
+        (span/span-context->map span-context)
+        {:name                    (.getName span-data)
+         :kind                    (str (.getKind span-data))
+         :parent-context          (span/span-context->map parent-context)
+         :attributes              (datafy (.getAttributes span-data))
+         :resource                (datafy (.getResource span-data))
+         :status                  (-> (.getStatus span-data) .getStatusCode span/StatusCode->keyword)
+         :recording?              (.isRecording span)
+         :ended?                  (.hasEnded span-data)
+         :links                   (->> (.getLinks span-data) vec) ;;TODO datafy links
+         :events                  (->> (.getEvents span-data) vec (map datafy))
+         :stats                   {:attributes-count (.getTotalAttributeCount span-data)
+                                   :links-count      (.getTotalRecordedLinks span-data)
+                                   :events-count     (.getTotalRecordedEvents span-data)}
+         :timestamps              {:start-epoch-nanos (.getStartEpochNanos span-data)
+                                   :end-epoch-nanos   (.getEndEpochNanos span-data)
+                                   :latency           (.getLatencyNanos span)}
+         :instrumentation-library (datafy (.getInstrumentationLibraryInfo span-data))}))))

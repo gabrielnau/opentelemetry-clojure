@@ -57,25 +57,26 @@
           :unknown-key-silently-ignored)))                  ;; Don't break if unknown arg given TODO: https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/error-handling.md#basic-error-handling-principles
     builder))
 
-(defn ^Span start!
+(defn ^Span start
   "Returns a Span given a SpanBuilder, set the parent Context and starts the timer."
   [span-builder]
   (.startSpan ^SpanBuilder span-builder))
 
 (defn ^Span new-started [tracer opts]
   (-> (new-builder tracer opts)
-    start!))
+    start))
 
-;; Span interface
+(defn end
+  ([^Span span]
+   (.end span))
+  ([^Span span ^Instant instant]
+   (.end span instant))
+  ([^Span span ^long ts ^TimeUnit unit]
+   (.end span ts unit)))
 
-(defn end!
-  ([^Span span] (.end span))
-  ([^Span span ^Instant instant] (.end span instant))
-  ([^Span span ^long ts ^TimeUnit unit] (.end span ts unit)))
-
-;; TODO
-(defn span-set-attribute [])
-(defn span-set-all-attributes [])
+;; TODO: decide on implementation
+(defn set-attribute [])
+(defn set-all-attributes [])
 
 (defn add-event
   "Return the given `Span` with an event added.
@@ -96,6 +97,7 @@
         timestamp  (:at-timestamp opts)
         attributes (:attributes opts)]
     (cond
+      ;; Order matter
       (and attributes timestamp)
       (.addEvent ^Span span ^String event-name ^Attributes (attributes/new attributes) ^long (:value timestamp) ^TimeUnit (:unit timestamp))
       (and attributes instant)
@@ -113,33 +115,42 @@
 (def status-unset :unset)
 (def status-ok :ok)
 (def status-error :error)
-(def statuses-mapping
-  {status-unset StatusCode/UNSET
-   status-ok    StatusCode/OK
-   status-error StatusCode/ERROR})
+(def status-mapping {status-unset StatusCode/UNSET
+                     status-ok    StatusCode/OK
+                     status-error StatusCode/ERROR})
+(def reverse-status-mapping (clojure.set/map-invert status-mapping))
+
+(defn keyword->StatusCode [x]
+  (get status-mapping x))
+
+(defn StatusCode->keyword [status-code]
+  (get reverse-status-mapping status-code))
 
 (defn set-status
-  ;;TODO: warn once wrong status code ?
+  "It will silently do nothing if status is unknown, following spec guideliens"
   ([span status-code]
-   (when-let [s (status-code statuses-mapping)]
+   (when-let [s (keyword->StatusCode status-code)]
      (.setStatus ^Span span ^StatusCode s)))
   ([span status-code description]
-   (when-let [s (status-code statuses-mapping)]
+   (when-let [s (keyword->StatusCode status-code)]
      (.setStatus ^Span span ^StatusCode s ^String description))))
 
 (defn record-exception
-  ([^Span span ^Throwable exception] (.recordException span exception))
-  ([^Span span ^Throwable exception attributes] (.recordException span exception ^Attributes (attributes/new attributes))))
+  ([^Span span ^Throwable exception]
+   (.recordException span exception))
+  ([^Span span ^Throwable exception attributes]
+   (.recordException span exception ^Attributes (attributes/new attributes))))
 
 (defn update-name [^Span span ^String new-name]
   (.updateName span new-name))
 
-;; NOT Context, but SpanContext
-(defn get-span-context [^Span span]
-  (.getSpanContext span))
+(defn get-span-context
+  "NOT Context, but SpanContext
 
-(defn recording? [span]
-  (.isRecording ^Span span))
+  A class that represents a span context. A span context contains the state that must propagate to child Spans and across process boundaries. It contains the identifiers (a trace_id and span_id) associated with the Span and a set of options (currently only whether the context is sampled or not), as well as the traceState and the remote flag. \n    Implementations of this interface *must* be immutable and have well-defined value-based equals/hashCode implementations. If an implementation does not strictly conform to these requirements, behavior of the OpenTelemetry APIs and default SDK cannot be guaranteed. It is strongly suggested that you use the implementation that is provided here via create(String, String, TraceFlags, TraceState) or createFromRemoteParent(String, String, TraceFlags, TraceState).
+  "
+  [^Span span]
+  (.getSpanContext span))
 
 (defn trace-flags->map [^TraceFlags trace-flags]
   {:hex      (.asHex trace-flags)

@@ -19,6 +19,8 @@
 (defn ^Attributes new
   "Returns a new instance of `Attributes` from the given key-values pairs in `attributes-map`.
 
+  TODO: document the behavior if given Attributes instance
+
   It is recommended to pre-allocate your AttributeKey keys if possible. See [[new-key]].
 
   Arguments:
@@ -51,14 +53,16 @@
     })
   ```
   "
-  [attributes-map]
-  (let [builder (Attributes/builder)]
-    (doseq [a attributes-map]
-      (let [k (nth a 0)]
-        (if (instance? AttributeKey k)
-          (.put builder ^AttributeKey k (nth a 1))
-          (.put builder ^String k (nth a 1)))))
-    (.build builder)))
+  [attributes]
+  (if (instance? Attributes attributes)
+    attributes
+    (let [builder (Attributes/builder)]
+      (doseq [a attributes]
+        (let [k (nth a 0)]
+          (if (instance? AttributeKey k)
+            (.put builder ^AttributeKey k (nth a 1)))
+          (.put builder ^String k (nth a 1))))
+      (.build builder))))
 
 (defn new-key
   "Return an AttributeKey instance typed to the expected matching attribute's value.

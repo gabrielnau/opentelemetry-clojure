@@ -12,15 +12,13 @@
 
 ;; General purpose
 
-(def string-gen
-  (gen/fmap
-    #(str %)
-    gen/uuid))
-;(gen/fmap #(-> (str/join %)
-;             (str/replace #" " ""))
-;  ;(gen/resize gen/small-integer) ;; TODO: upper bound ?
-;  (gen/not-empty
-;    (gen/vector gen/char-ascii 40))))
+(def non-empty-printable-string
+  (gen/such-that
+    #(and
+       (not (.isEmpty %))
+       (not (str/blank? %))
+       (StringUtils/isPrintableString %))
+    (gen/not-empty gen/string-ascii)))
 
 (def simple-double (gen/double* {:infinite? false
                                  :NaN?      false}))
@@ -28,11 +26,11 @@
 ;; Attribute
 
 (def type->generator
-  {:string        string-gen
+  {:string        non-empty-printable-string
    :boolean       gen/boolean
    :long          gen/large-integer
    :double        simple-double
-   :string-array  (gen/fmap attributes/string-array (gen/vector string-gen 1 10))
+   :string-array  (gen/fmap attributes/string-array (gen/vector non-empty-printable-string 1 10))
    :boolean-array (gen/fmap boolean-array (gen/vector gen/boolean 1 10))
    :long-array    (gen/fmap long-array (gen/vector gen/large-integer 1 50))
    :double-array  (gen/fmap long-array (gen/vector simple-double 1 50))})
@@ -41,45 +39,40 @@
 
 (def attribute-type-gen (gen/elements attribute-types-list))
 
-(defn AttributeKey-gen [attribute-type]
-  (gen/fmap #(attributes/new-key % attribute-type)
-    (gen/not-empty
-      string-gen)))
-
-(defn attribute-key-gen [attribute-type]
-  (gen/such-that
-    #(not (str/blank? (datafy %)))
-    (gen/one-of
-      [(gen/not-empty
-         string-gen)
-       (AttributeKey-gen attribute-type)])))
-
-(defn attribute-value-gen [type]
-  (gen/such-that
-    #(not (str/blank? (str %)))
-    (get type->generator type)))
-
-(def attributes-gen
-  (gen/fmap
-    ;; FIXME: we shall use gen/map such as there is no key conflicts, and we loose proper shrink
-    ;; But we have to define dynamic keys, this is not supported by gen/hash-map
-    #(into {} %)
-    (gen/vector
-      (gen/let [type attribute-type-gen
-                key (attribute-key-gen type)
-                value (attribute-value-gen type)]
-        [key value])
-      1 1)))                                                ;; FIXME: see the upperbound limit
-
-;; Baggage
-
-(def non-empty-printable-string
+(def attribute-key-name-gen
   (gen/such-that
     #(and
        (not (.isEmpty %))
        (not (str/blank? %))
        (StringUtils/isPrintableString %))
     (gen/not-empty gen/string-ascii)))
+
+(defn AttributeKey-gen [attribute-type]
+  (gen/fmap
+    #(attributes/new-key % attribute-type)
+    attribute-key-name-gen))
+
+(defn attribute-key-gen [attribute-type]
+  (gen/one-of
+    [attribute-key-name-gen
+     (AttributeKey-gen attribute-type)]))
+
+(defn attribute-value-gen [type]
+  (get type->generator type))
+
+(def attributes-gen
+  (gen/fmap
+    #(reduce
+       (fn [acc x] (assoc acc (:key x) (:value x))) {} %)
+    (gen/vector-distinct-by
+      :key
+      (gen/let [type attribute-type-gen
+                key (attribute-key-gen type)
+                value (attribute-value-gen type)]
+        {:key key :value value})
+      {:min-elements 1 :max-elements 8}))) ;; TODO: find where this limit of 8 is documented
+
+;; Baggage
 
 (def baggage-key-gen non-empty-printable-string)
 
@@ -100,9 +93,6 @@
           (gen/return :value)
           non-empty-printable-string)))))
 
-
-
-
 ;; Context
 
 (defn context-gen []
@@ -113,14 +103,16 @@
 (def span-kind-gen
   (gen/elements (keys span/kinds-mapping)))
 
+(def span-status-gen
+  (gen/elements (keys span/status-mapping)))
+
 (def span-name-gen
-  (gen/not-empty
-    string-gen))
+  non-empty-printable-string)
 
 (def span-parent-gen
   (gen/one-of
     [(gen/return span/no-parent)
-     (context-gen)]))
+     (context-gen)]))                                       ;; fixme ?
 
 (def span-links-gen
   (gen/return []))
@@ -139,15 +131,18 @@
 (def trace-state-gen
   (gen/return (TraceState/getDefault)))                     ;; no need for now to produce anything else
 
-(defn span-context-from-map [{:keys [trace-id span-id trace-flags trace-state]}]
-  (SpanContext/create trace-id span-id trace-flags trace-state))
+(def uuid-str-gen
+  (gen/fmap
+    #(str %)
+    gen/uuid))
+
+(comment
+  (defn span-context-from-map [{:keys [trace-id span-id trace-flags trace-state]}]
+    (SpanContext/create trace-id span-id trace-flags trace-state)))
 
 (def span-context-gen
   (gen/hash-map
-    :trace-id string-gen                                    ;; FIXME: get more close to the specification, see IdGenerator
-    :span-id string-gen
+    :trace-id uuid-str-gen                                  ;; FIXME: get more close to the specification, see IdGenerator
+    :span-id uuid-str-gen
     :trace-flags trace-flags-gen
     :trace-state trace-state-gen))
-
-
-

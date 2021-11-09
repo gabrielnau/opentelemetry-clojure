@@ -1,24 +1,113 @@
 (ns opentelemetry-clj.trace.span-test
   (:require
-    [clojure.datafy :refer [datafy]]
     [clojure.test :refer :all]
+    [matcher-combinators.test]
+    [clojure.datafy :refer [datafy]]
     [clojure.test.check.generators :as gen]
     [opentelemetry-clj.sdk.datafy]
     [opentelemetry-clj.test-generators :as generators]
     [opentelemetry-clj.test-utils :as utils]
-    [opentelemetry-clj.trace.span :as subject])
-  (:import (io.opentelemetry.api.trace SpanBuilder Span)))
+    [opentelemetry-clj.trace.span :as subject]
+    [clojure.test.check :as test-check]
+    [clojure.test.check.properties :as prop]
+    [opentelemetry-clj.test-utils :as test-utils]
+    [portal.api :as portal]
+    [matcher-combinators.matchers :as m])
+  (:import (io.opentelemetry.api.trace SpanBuilder Span SpanContext)
+           (java.time Instant)
+           (java.util.concurrent TimeUnit)))
+
+(deftest update-name-fn
+  (let [[tracer _] (utils/get-tracer-and-exporter)]
+    (test-check/quick-check
+      100
+      (prop/for-all [distinct-names (gen/list-distinct
+                                      generators/span-name-gen
+                                      {:num-elements 2})]
+        (let [[old-name new-name] distinct-names
+              span (subject/new-started tracer {:name old-name})]
+          (subject/update-name span new-name)
+          (let [span-name (-> span datafy :name)]
+            (is (match? new-name span-name))))))))
+
+(deftest set-status-fn
+  (let [[tracer _] (utils/get-tracer-and-exporter)
+        span (subject/new-started tracer {:name (gen/generate generators/span-name-gen)})]
+    (is (match? subject/status-unset (-> span datafy :status)))
+
+    (testing "ignores unknown status"
+      (subject/set-status span :incorrect-status)
+      (is (match? subject/status-unset (-> span datafy :status))))
+
+    (testing "set known statuses"
+      (test-check/quick-check
+        100
+        (prop/for-all [status generators/span-status-gen]
+          (subject/set-status span status)
+          (is (match? status (-> span datafy :status))))))))
+
+(deftest record-exception-fn
+  (let [[tracer _] (utils/get-tracer-and-exporter)]
+    (let [msg       (gen/generate generators/non-empty-printable-string)
+          exception (ex-info msg {})
+          span      (subject/new-started tracer {:name (gen/generate generators/span-name-gen)})]
+      (subject/record-exception span exception)
+      (is (match?
+            ;; don't test stacktrace
+            {:message msg :type "clojure.lang.ExceptionInfo"}
+            (first
+              (test-utils/span->recorded-exceptions span)))))))
+
+(deftest get-span-context-fn
+  (let [[tracer _] (utils/get-tracer-and-exporter)]
+    (let [span         (subject/new-started tracer {:name (gen/generate generators/span-name-gen)})
+          span-context (subject/get-span-context span)]
+      (is (instance? SpanContext span-context)))))
 
 (deftest new-builder
   (let [[tracer _] (utils/get-tracer-and-exporter)
-        b (subject/new-builder tracer {:name "foo"})]
+        b (subject/new-builder tracer {:name (gen/generate generators/span-name-gen)})]
     (is (instance? SpanBuilder b))))
 
-(deftest start
+(deftest start-fn
   (let [[tracer _] (utils/get-tracer-and-exporter)
-        b    (subject/new-builder tracer {:name "foo"})
-        span (subject/start! b)]
-    (is (instance? Span span))))
+        span-builder (subject/new-builder tracer {:name (gen/generate generators/span-name-gen)})
+        span         (subject/start span-builder)]
+    (is (instance? Span span))
+    (is (.isRecording span))))
+
+(deftest end-fn
+  (let [[tracer _] (utils/get-tracer-and-exporter)]
+    (testing "no end timestamp given"
+      (let [span-builder (subject/new-builder tracer {:name (gen/generate generators/span-name-gen)})
+            span         (subject/start span-builder)]
+        (is (not (.hasEnded span)))
+        (subject/end span)
+        (is (.hasEnded span))
+        (is
+          (match?
+            (test-utils/matcher-nano-max-100ms-ago)
+            (-> span datafy :timestamps :end-epoch-nanos)))))
+    (testing "Instant end timestamp given"
+      (let [span-builder (subject/new-builder tracer {:name (gen/generate generators/span-name-gen)})
+            span         (subject/start span-builder)
+            now          (Instant/now)]
+        (is (not (.hasEnded span)))
+        (subject/end span now)
+        (is (.hasEnded span))
+        (is (match?
+              (test-utils/instant->epoch-nanos now)
+              (-> span datafy :timestamps :end-epoch-nanos)))))
+    (testing "ts and time unit given"
+      (let [span-builder (subject/new-builder tracer {:name (gen/generate generators/span-name-gen)})
+            span         (subject/start span-builder)
+            now          (Instant/now)]
+        (is (not (.hasEnded span)))
+        (subject/end span (test-utils/instant->epoch-nanos now) TimeUnit/NANOSECONDS)
+        (is (.hasEnded span))
+        (is (match?
+              (test-utils/instant->epoch-nanos now)
+              (-> span datafy :timestamps :end-epoch-nanos)))))))
 
 (deftest build-span
   (let [[tracer memory-exporter] (utils/get-tracer-and-exporter)]

@@ -31,12 +31,14 @@
   (testing "builds a typed AttributeKey instance"
     (test-check/quick-check
       1000
-      (prop/for-all [key generators/string-gen
+      (prop/for-all [key generators/non-empty-printable-string
                      type generators/attribute-type-gen]
         (let [result (subject/new-key key type)]
           (is (instance? AttributeKey result))
           (is (= key (.getKey result)))
           (is (= type (AttributeType->keyword (.getType result)))))))))
+
+;(test-utils/start-portal!)
 
 (deftest new-fn
   (test-check/quick-check
@@ -46,12 +48,13 @@
             result-as-map (subject/->map result)
             args-as-map   (test-utils/attribute-arguments->map args)]
         (is (instance? Attributes result))
+        ;(if-not (= (count args) (.size result) (count result-as-map) (count args-as-map))
+        ;  (println (clojure.set/difference args args-as-map)))
+
+        (is (= (count args) (.size result) (count result-as-map) (count args-as-map)))
         (is (match?
-              (m/match-with [map? m/equals] result-as-map)
-              args-as-map))
-        (is (match?
-              (count (keys args-as-map))
-              (.size result)))))))
+              (m/equals result-as-map)
+              args-as-map))))))
 
 (deftest get-fn
   (let [attribute-key (gen/generate (generators/AttributeKey-gen :double))

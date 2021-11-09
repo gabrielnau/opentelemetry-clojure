@@ -15,7 +15,7 @@
           right    (nth v 1)
           value    ^String (:value right)
           metadata ^String (:metadata right)]
-      (if (and metadata (not (empty? metadata)))
+      (if (and metadata (not (clojure.core/empty? metadata)))
         (.put builder key value ^BaggageEntryMetadata (BaggageEntryMetadata/create metadata))
         (.put builder key value))))
   builder)
