@@ -60,8 +60,8 @@
       (doseq [a attributes]
         (let [k (nth a 0)]
           (if (instance? AttributeKey k)
-            (.put builder ^AttributeKey k (nth a 1)))
-          (.put builder ^String k (nth a 1))))
+            (.put builder ^AttributeKey k (nth a 1))
+            (.put builder ^String k (nth a 1)))))
       (.build builder))))
 
 (defn new-key
