@@ -3,7 +3,7 @@
   (:require [opentelemetry-clj.attributes :as attributes])
   (:import (io.opentelemetry.api.trace SpanBuilder SpanContext SpanKind Tracer Span StatusCode TraceFlags TraceState)
            (io.opentelemetry.context Context)
-           (io.opentelemetry.api.common Attributes)
+           (io.opentelemetry.api.common Attributes AttributeKey)
            (java.util.concurrent TimeUnit)
            (java.time Instant)
            (java.util.function BiConsumer)))
@@ -74,9 +74,28 @@
   ([^Span span ^long ts ^TimeUnit unit]
    (.end span ts unit)))
 
-;; TODO: decide on implementation
-(defn set-attribute [])
-(defn set-all-attributes [])
+(defn set-attribute
+  "Return the given `Span` with an attribute added or overriden.
+
+  Arguments:
+  - `span`: Required, target Span of event
+  - `attribute-key`: Required, can be an instance of `AttributeKey` (see [opentelemetry-clj.attributes/new-key]) or a string. If providing `AttributeKey` it will avoid runtime reflection.
+  - `attribute-value`: Required, see  [opentelemetry-clj.attributes/new-key] for details and possible types
+  "
+  [^Span span attribute-key attribute-value]
+  (if (instance? AttributeKey attribute-key)
+    (.setAttribute span ^AttributeKey attribute-key attribute-value)
+    (.setAttribute span attribute-key attribute-value)))
+
+(defn set-all-attributes
+  "Return the given `Span` with attributes added or overriden.
+
+  Arguments:
+  - `span`: Required, target Span of event
+  - `attributes`: Required, see [opentelemetry-clj.attributes/new] for details and possible types
+  "
+  [^Span span attributes]
+  (.setAllAttributes span (attributes/new attributes)))
 
 (defn add-event
   "Return the given `Span` with an event added.

@@ -1,6 +1,7 @@
 (ns opentelemetry-clj.attributes
   "Implements OpenTelemetry [Attributes](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/attribute-naming.md)."
   (:refer-clojure :exclude [get])
+  (:require [clojure.string :as str])
   (:import (io.opentelemetry.api.common Attributes AttributeKey AttributeType)
            (java.util.function BiConsumer)))
 
@@ -20,12 +21,14 @@
   "Returns a new instance of `Attributes` from the given key-values pairs in `attributes-map`.
 
   TODO: document the behavior if given Attributes instance
-
   It is recommended to pre-allocate your AttributeKey keys if possible. See [[new-key]].
+  FIXME:
+
+   - `attributes` keys: Can be an instance of `AttributeKey` or a string. If providing `AttributeKey` it will avoid runtime reflection.
+   - `attributes` values: A instace of `string` | `boolean` | `long` | `double` | `string array` | `boolean array` | `long array` | `double array`. If the provided key is an `AttributeKey`, then the type must match.
 
   Arguments:
-  - `attributes-map` keys: Can be an instance of `AttributeKey` or a string. If providing `AttributeKey` it will avoid runtime reflection.
-  - `attributes-map` values: A instace of `string` | `boolean` | `long` | `double` | `string array` | `boolean array` | `long array` | `double array`. If the provided key is an `AttributeKey`, then the type must match.
+  - `attributes`: it can be an instance of `Attributes` or a Clojure map. If it's an instance of `Attributes`, this function is a no-op and returns it. If
 
   Example:
   ```clojure
@@ -67,7 +70,7 @@
 (defn new-key
   "Return an AttributeKey instance typed to the expected matching attribute's value.
 
-  It is recommended to pre-allocate your AttributeKey keys if possible.
+  It is recommended to pre-allocate AttributeKey if possible.
 
   Arguments:
   - `key-name`: Required, a string. See [conventions](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/common/attribute-naming.md)
@@ -84,15 +87,20 @@
     :long-array (AttributeKey/longArrayKey ^String key-name)
     :double-array (AttributeKey/doubleArrayKey ^String key-name)))
 
-(def AttributeType->clojurize-fn
-  {AttributeType/STRING        identity
-   AttributeType/BOOLEAN       identity
-   AttributeType/LONG          identity
-   AttributeType/DOUBLE        identity
-   AttributeType/STRING_ARRAY  (fn [x] (into [] x))
-   AttributeType/BOOLEAN_ARRAY (fn [x] (into [] x))
-   AttributeType/LONG_ARRAY    (fn [x] (into [] x))
-   AttributeType/DOUBLE_ARRAY  (fn [x] (into [] x))})
+
+(defn AttributeType->keyword [x]
+  (-> x str str/lower-case (str/replace #"_" "-") keyword))
+
+(defn clojurize-attribute-value [attribute-type value]
+  (condp = attribute-type
+    AttributeType/STRING        value
+    AttributeType/BOOLEAN       value
+    AttributeType/LONG          value
+    AttributeType/DOUBLE        value
+    AttributeType/STRING_ARRAY  (into [] value)
+    AttributeType/BOOLEAN_ARRAY (into [] value)
+    AttributeType/LONG_ARRAY    (into [] value)
+    AttributeType/DOUBLE_ARRAY  (into [] value)))
 
 (defn ->map
   "Returns given `attributes` as data."
@@ -102,10 +110,9 @@
       (reify
         BiConsumer
         (accept [_ k v]
-          (let [attribute-type     (.getType k)
-                clojurize-value-fn (clojure.core/get AttributeType->clojurize-fn attribute-type)]
-            (assoc! result (.getKey ^AttributeKey k) (clojurize-value-fn v))))))
+          (assoc! result (.getKey k) (clojurize-attribute-value (.getType k) v)))))
     (persistent! result)))
+
 
 (defn get
   "Returns the value for the given `AttributeKey`, or null if not found.

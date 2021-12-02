@@ -8,7 +8,8 @@
     [opentelemetry-clj.sdk.datafy]
     [opentelemetry-clj.trace.span :as span])
   (:import (io.opentelemetry.api.trace TraceFlags TraceState SpanContext)
-           (io.opentelemetry.api.internal StringUtils)))
+           (io.opentelemetry.api.internal StringUtils)
+           (io.opentelemetry.api.common AttributeType)))
 
 ;; General purpose
 
@@ -26,20 +27,20 @@
 ;; Attribute
 
 (def attribute-string-value
-  "non empty ascii string, size max 254"
+  "non empty ascii string, size max 254, may be blank"
   (gen/fmap
     str/join
     (gen/vector gen/char-ascii 1 254)))
 
 (def attribute-type->generator
-  {:string        attribute-string-value
-   :boolean       gen/boolean
-   :long          gen/large-integer
-   :double        simple-double
-   :string-array  (gen/fmap attributes/string-array (gen/vector non-empty-printable-string 1 10))
-   :boolean-array (gen/fmap boolean-array (gen/vector gen/boolean 1 10))
-   :long-array    (gen/fmap long-array (gen/vector gen/large-integer 1 50))
-   :double-array  (gen/fmap long-array (gen/vector simple-double 1 50))})
+  {AttributeType/STRING        attribute-string-value
+   AttributeType/BOOLEAN       gen/boolean
+   AttributeType/LONG          gen/large-integer
+   AttributeType/DOUBLE        simple-double
+   AttributeType/STRING_ARRAY  (gen/fmap attributes/string-array (gen/vector non-empty-printable-string 1 10))
+   AttributeType/BOOLEAN_ARRAY (gen/fmap boolean-array (gen/vector gen/boolean 1 10))
+   AttributeType/LONG_ARRAY    (gen/fmap long-array (gen/vector gen/large-integer 1 50))
+   AttributeType/DOUBLE_ARRAY  (gen/fmap long-array (gen/vector simple-double 1 50))})
 
 (def attribute-types-list (keys attribute-type->generator))
 (def attribute-type-gen (gen/elements attribute-types-list))
@@ -51,7 +52,7 @@
 
 (defn AttributeKey-gen [attribute-type]
   (gen/fmap
-    #(attributes/new-key % attribute-type)
+    #(attributes/new-key % (attributes/AttributeType->keyword attribute-type))
     attribute-key-name-gen))
 
 (defn attribute-key-gen [attribute-type]
@@ -62,17 +63,20 @@
 (defn attribute-value-gen [type]
   (get attribute-type->generator type))
 
+(def attribute-gen
+  (gen/let [type attribute-type-gen
+            key (attribute-key-gen type)
+            value (attribute-value-gen type)]
+    {:key key :value value :type type}))
+
 (def attributes-gen
   (gen/fmap
     #(reduce
        (fn [acc x] (assoc acc (:key x) (:value x))) {} %)
     (gen/vector-distinct-by
       :key
-      (gen/let [type attribute-type-gen
-                key (attribute-key-gen type)
-                value (attribute-value-gen type)]
-        {:key key :value value})
-      {:min-elements 1 :max-elements 8}))) ;; TODO: find where this limit of 8 is documented
+      attribute-gen
+      {:min-elements 1 :max-elements 8})))                  ;; TODO: find where this limit of 8 is documented
 
 ;; Baggage
 

@@ -21,8 +21,7 @@
     (io.opentelemetry.sdk.common InstrumentationLibraryInfo)
     (io.opentelemetry.sdk.resources AutoValue_Resource Resource)
     (io.opentelemetry.sdk.trace RecordEventsReadableSpan)
-    (io.opentelemetry.sdk.trace.data EventData)
-    (java.util.function BiConsumer)))
+    (io.opentelemetry.sdk.trace.data EventData)))
 
 ;; Primitive arrays, see https://clojure.atlassian.net/browse/CLJ-1381
 (extend-protocol protocols/Datafiable

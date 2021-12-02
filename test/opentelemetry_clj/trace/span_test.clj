@@ -12,7 +12,8 @@
     [clojure.test.check.properties :as prop]
     [opentelemetry-clj.test-utils :as test-utils]
     [portal.api :as portal]
-    [matcher-combinators.matchers :as m])
+    [matcher-combinators.matchers :as m]
+    [opentelemetry-clj.attributes :as attributes])
   (:import (io.opentelemetry.api.trace SpanBuilder Span SpanContext)
            (java.time Instant)
            (java.util.concurrent TimeUnit)))
@@ -124,7 +125,24 @@
             span        (subject/new-started tracer attributes)
             span-as-map (datafy span)]
         (println (:parent span-as-map))
+        ;; TODO: finish this
         (is (match? (:name span-as-map) (:name attributes)))))))
+
+(deftest set-attribute-fn
+  (test-check/quick-check
+    1000
+    (prop/for-all [{:keys [key value type]} generators/attribute-gen]
+      (let [[tracer _] (utils/get-tracer-and-exporter)
+            span (subject/new-started tracer {:name (gen/generate generators/span-name-gen)})]
+        (subject/set-attribute span key value)
+        (let [span-attributes (-> span datafy :attributes)
+              key-as-string   (datafy key) ;; can be a string or an AttributeKey
+              attr-value-clojurized (attributes/clojurize-attribute-value type value)
+              result-value    (get span-attributes key-as-string)]
+          (is (match?
+                result-value
+                attr-value-clojurized)))))))
+
 
 ;; TODO:
 ;; parent: put some context in thread, create :another_span in another context then:

@@ -12,14 +12,7 @@
     [opentelemetry-clj.sdk.datafy]
     [opentelemetry-clj.test-utils :as test-utils]
     [clojure.test.check.generators :as gen])
-  (:import (io.opentelemetry.api.common AttributeKey Attributes)))
-
-(defn AttributeType->keyword [a]
-  (-> a
-    str
-    str/lower-case
-    (str/replace #"_" "-")
-    keyword))
+  (:import (io.opentelemetry.api.common AttributeKey Attributes AttributeType)))
 
 (deftest string-array-fn
   (let [str-array (subject/string-array ["foo" "bar"])]
@@ -28,17 +21,15 @@
     (is (match? "bar" (last str-array)))))
 
 (deftest new-key-fn
-  (testing "builds a typed AttributeKey instance"
-    (test-check/quick-check
-      1000
-      (prop/for-all [key generators/attribute-key-name-gen
-                     type generators/attribute-type-gen]
-        (let [result (subject/new-key key type)]
-          (is (instance? AttributeKey result))
-          (is (= key (.getKey result)))
-          (is (= type (AttributeType->keyword (.getType result)))))))))
-
-;(test-utils/start-portal!)
+  (test-check/quick-check
+    1000
+    (prop/for-all [key generators/attribute-key-name-gen
+                   type generators/attribute-type-gen]
+      (let [type-as-keyword (subject/AttributeType->keyword type)
+            result (subject/new-key key type-as-keyword)]
+        (is (instance? AttributeKey result))
+        (is (match? key (.getKey result)))
+        (is (match? type-as-keyword (subject/AttributeType->keyword (.getType result))))))))
 
 (deftest new-fn
   (test-check/quick-check
@@ -54,9 +45,9 @@
               args-as-map))))))
 
 (deftest get-fn
-  (let [attribute-key (gen/generate (generators/AttributeKey-gen :double))
+  (let [attribute-key   (gen/generate (generators/AttributeKey-gen AttributeType/DOUBLE))
         attribute-value (double 123)
-        resource (subject/new {attribute-key attribute-value})
-        result (subject/get resource attribute-key)]
+        resource        (subject/new {attribute-key attribute-value})
+        result          (subject/get resource attribute-key)]
     (is (match? result (double 123)))))
 
