@@ -11,12 +11,12 @@
     [clojure.test.check :as test-check]
     [clojure.test.check.properties :as prop]
     [opentelemetry-clj.test-utils :as test-utils]
-    [portal.api :as portal]
     [matcher-combinators.matchers :as m]
     [opentelemetry-clj.attributes :as attributes])
   (:import (io.opentelemetry.api.trace SpanBuilder Span SpanContext)
            (java.time Instant)
-           (java.util.concurrent TimeUnit)))
+           (java.util.concurrent TimeUnit)
+           (io.opentelemetry.api.common Attributes)))
 
 (deftest update-name-fn
   (let [[tracer _] (utils/get-tracer-and-exporter)]
@@ -139,9 +139,20 @@
               key-as-string   (datafy key) ;; can be a string or an AttributeKey
               attr-value-clojurized (attributes/clojurize-attribute-value type value)
               result-value    (get span-attributes key-as-string)]
+          (is (match? result-value attr-value-clojurized)))))))
+
+(deftest set-all-attributes-fn
+  (test-check/quick-check
+    1000
+    (prop/for-all [attrs-args generators/attributes-gen]
+      (let [[tracer _] (utils/get-tracer-and-exporter)
+            span (subject/new-started tracer {:name (gen/generate generators/span-name-gen)})]
+        (subject/set-all-attributes span attrs-args)
+        (let [span-attributes (-> span datafy :attributes)
+              attrs-args-as-map   (test-utils/attribute-arguments->map attrs-args)]
           (is (match?
-                result-value
-                attr-value-clojurized)))))))
+                (m/equals span-attributes)
+                attrs-args-as-map)))))))
 
 
 ;; TODO:
