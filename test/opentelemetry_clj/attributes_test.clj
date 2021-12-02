@@ -31,7 +31,7 @@
   (testing "builds a typed AttributeKey instance"
     (test-check/quick-check
       1000
-      (prop/for-all [key generators/non-empty-printable-string
+      (prop/for-all [key generators/attribute-key-name-gen
                      type generators/attribute-type-gen]
         (let [result (subject/new-key key type)]
           (is (instance? AttributeKey result))
@@ -48,9 +48,6 @@
             result-as-map (subject/->map result)
             args-as-map   (test-utils/attribute-arguments->map args)]
         (is (instance? Attributes result))
-        ;(if-not (= (count args) (.size result) (count result-as-map) (count args-as-map))
-        ;  (println (clojure.set/difference args args-as-map)))
-
         (is (= (count args) (.size result) (count result-as-map) (count args-as-map)))
         (is (match?
               (m/equals result-as-map)

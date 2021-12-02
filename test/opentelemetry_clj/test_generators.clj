@@ -25,8 +25,14 @@
 
 ;; Attribute
 
-(def type->generator
-  {:string        non-empty-printable-string
+(def attribute-string-value
+  "non empty ascii string, size max 254"
+  (gen/fmap
+    str/join
+    (gen/vector gen/char-ascii 1 254)))
+
+(def attribute-type->generator
+  {:string        attribute-string-value
    :boolean       gen/boolean
    :long          gen/large-integer
    :double        simple-double
@@ -35,17 +41,13 @@
    :long-array    (gen/fmap long-array (gen/vector gen/large-integer 1 50))
    :double-array  (gen/fmap long-array (gen/vector simple-double 1 50))})
 
-(def attribute-types-list (keys type->generator))
-
+(def attribute-types-list (keys attribute-type->generator))
 (def attribute-type-gen (gen/elements attribute-types-list))
 
 (def attribute-key-name-gen
-  (gen/such-that
-    #(and
-       (not (.isEmpty %))
-       (not (str/blank? %))
-       (StringUtils/isPrintableString %))
-    (gen/not-empty gen/string-ascii)))
+  (gen/fmap
+    str/join
+    (gen/vector gen/char-ascii 1 254)))
 
 (defn AttributeKey-gen [attribute-type]
   (gen/fmap
@@ -58,7 +60,7 @@
      (AttributeKey-gen attribute-type)]))
 
 (defn attribute-value-gen [type]
-  (get type->generator type))
+  (get attribute-type->generator type))
 
 (def attributes-gen
   (gen/fmap
