@@ -1,3 +1,13 @@
+- TODO: leverage Clojure native immutable implementation where possible instead of having the cost to convert a Clojure
+  objects to a (immutable) OTEL ones ?
+    - Candidates which are immutable: Bagage, Attribute, SpanContexts, TraceState, Resource, Context ?
+        - TODO: evaluate what it would mean to implement completely Context and Storage provider in Clojure ? could we
+          expect some simplicity and eventually perf gain ?
+        - Discarded solution: clojure dynamic scope with a ^dynamic Var + with-binding macro because
+          it's [way slower than Java ThreadLocal API](https://tech.redplanetlabs.com/2020/09/02/clojure-faster/#dynamic-vars)
+
+
+
 # In-process `Context` propagation
 
 **Definitions and scope of the problem :**
