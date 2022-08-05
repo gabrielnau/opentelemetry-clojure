@@ -1,6 +1,6 @@
 # opentelemetry-clojure WIP
 
-Status: WIP for the tracing API.
+Status: abandonned unfinished, use [steffan-westcott/clj-otel](https://github.com/steffan-westcott/clj-otel) instead.
 
 Clojure wrapper of [opentelemetry-java](https://opentelemetry.io/docs/java/).
 
